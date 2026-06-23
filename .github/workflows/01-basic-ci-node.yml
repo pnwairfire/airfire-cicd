@@ -1,0 +1,78 @@
+# .github/workflows/01-basic-ci-node.yml
+# USFS AirFire CI/CD Style Guide: Level 1 - Basic Continuous Integration (NodeJS)
+#
+# Educational Goals:
+# 1. Understand GitHub Actions triggers (`on: pull_request`).
+# 2. Learn the structure of jobs, steps, and runners for Node.js.
+# 3. Enforce code quality using ESLint and Prettier.
+# 4. Run automated test suites using Jest/Vitest before code integration.
+# 5. Practice the convention of using version tags for actions.
+
+name: "01 - Basic CI (NodeJS Linting & Testing)"
+
+on:
+  pull_request:
+    # Trigger CI on PRs into main or master branches to protect target branches
+    branches:
+      - main
+      - master
+    # Only trigger when relevant code files are changed
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+
+# Restrict default permissions of GITHUB_TOKEN to read-only for security
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Format Checks (NodeJS)
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository code
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm" # Enables automatic npm dependency caching
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Prettier Check
+        run: npm run format:check
+
+  test:
+    name: Run Unit Tests (NodeJS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Tests with Coverage
+        run: npm test -- --coverage
+
+      # Upload coverage artifacts as a teaching demo of sharing artifacts
+      - name: Upload Test Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodejs-code-coverage-report
+          path: coverage/
+          retention-days: 7

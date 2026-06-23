@@ -65,18 +65,13 @@ For small development teams, maintaining more than two persistent environments (
 
 ## 3. Security Best Practices for CI/CD
 
-<!-- ### Pinning Action Versions
-To guard against third-party dependency compromises (supply-chain attacks), all GitHub Actions workflows in AirFire repositories must use full 40-character commit SHAs instead of mutable tags like `@v4` or `@latest`. A comment indicating the human-readable version must be appended.
+### Versioning Actions
+To ensure compatibility and receive automatic patch updates, GitHub Actions workflows in AirFire repositories use major version tags (e.g., `@v4`) rather than full 40-character commit SHAs.
 
-*Incorrect:*
+*Example:*
 ```yaml
 uses: actions/checkout@v4
 ```
-
-*Correct:*
-```yaml
-uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-``` -->
 
 ### AWS OpenID Connect (OIDC) Authentication
 AirFire pipelines do not store long-lived, high-risk AWS Access Keys (`AKIA...`) or Secret Keys in GitHub. Instead, they use OpenID Connect (OIDC) to request short-term, auto-expiring credentials from AWS Security Token Service (STS). Detailed instructions for configuring AWS OIDC are available in the [AWS OIDC Identity Provider and IAM Role Setup Guide](aws-oidc-setup.md).
@@ -92,7 +87,7 @@ Note that GitHub Secrets are still utilized to store non-credential configuratio
 - Use the official configuration action to assume the designated IAM role:
   ```yaml
   - name: Configure AWS Credentials
-    uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+    uses: aws-actions/configure-aws-credentials@v4
     with:
       role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
       aws-region: us-west-2
@@ -133,18 +128,30 @@ For new applications, compute is serverless and managed natively by AWS.
 The repository contains four progressive workflows located under the `.github/workflows/` directory:
 
 1. **Level 1: Basic Continuous Integration**
-   - File Path: [01-basic-ci.yml](../.github/workflows/01-basic-ci.yml)
-   - Scope: Checks code linting and formatting (Ruff, Black) and runs automated test suites on pull requests.
+   - **Python**:
+     - File Path: [01-basic-ci.yml](../.github/workflows/01-basic-ci.yml)
+     - Scope: Checks code linting and formatting (Ruff, Black) and runs automated test suites (pytest) on pull requests.
+   - **NodeJS**:
+     - File Path: [01-basic-ci-node.yml](../.github/workflows/01-basic-ci-node.yml)
+     - Scope: Checks code linting and formatting (ESLint, Prettier) and runs automated test suites (Jest) on pull requests.
    - Purpose: Establishes base quality gates before merging.
 
 2. **Level 2: Matrix Builds and Environments**
-   - File Path: [02-environments-matrix.yml](../.github/workflows/02-environments-matrix.yml)
-   - Scope: Introduces Python runtime testing matrices and separates deployment jobs for `dev` and `prod` environments based on branch pushes and versioned tags.
+   - **Python**:
+     - File Path: [02-environments-matrix.yml](../.github/workflows/02-environments-matrix.yml)
+     - Scope: Introduces Python runtime testing matrices and separates deployment jobs for `dev` and `prod` environments based on branch pushes and versioned tags.
+   - **NodeJS**:
+     - File Path: [02-environments-matrix-node.yml](../.github/workflows/02-environments-matrix-node.yml)
+     - Scope: Introduces NodeJS version testing matrices and separates deployment jobs for `dev` and `prod` environments based on branch pushes and versioned tags.
    - Purpose: Demonstrates environmental routing and parameterization.
 
 3. **Level 3: Secure AWS Deployment**
-   - File Path: [03-aws-oidc.yml](../.github/workflows/03-aws-oidc.yml)
-   - Scope: Adds AWS OIDC configuration and container image builds. Illustrates deployment setups for both the legacy (EC2/Fabric) and modern (ECS/Fargate) execution footprints.
+   - **Python**:
+     - File Path: [03-aws-oidc.yml](../.github/workflows/03-aws-oidc.yml)
+     - Scope: Adds AWS OIDC configuration and container image builds. Illustrates deployment setups for both the legacy (EC2/Fabric) and modern (ECS/Fargate) execution footprints.
+   - **NodeJS**:
+     - File Path: [03-aws-oidc-node.yml](../.github/workflows/03-aws-oidc-node.yml)
+     - Scope: Adds AWS OIDC configuration and container image builds. Illustrates deployment setups for both the legacy (EC2/SSH script) and modern (ECS/Fargate) execution footprints.
    - Purpose: Teaches secure cloud authentication and Docker deployment patterns.
 
 4. **Level 4: Infrastructure as Code (IaC) GitOps**

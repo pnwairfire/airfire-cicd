@@ -22,9 +22,12 @@ The progressive workflows are organized in sequence under the `.github/workflows
 
 | Sequence | Workflow File | Focus Areas | Key Actions and Concepts |
 | :--- | :--- | :--- | :--- |
-| **01** | [01-basic-ci.yml](.github/workflows/01-basic-ci.yml) | Base Continuous Integration | Code checkout, Python environment setup, dependency caching, Ruff linting, Black formatting, Pytest unit testing, artifact upload. |
-| **02** | [02-environments-matrix.yml](.github/workflows/02-environments-matrix.yml) | Parameterization & Environments | Multi-version testing matrix, environmental target scoping (`dev` vs. `prod`), environmental secrets, and conditional execution. |
-| **03** | [03-aws-oidc.yml](.github/workflows/03-aws-oidc.yml) | Secure Cloud Deployment | AWS OpenID Connect (OIDC) keyless authentication, Docker image construction, ECR pushes, and comparative setup for Legacy (EC2/Fabric) and Modern (ECS/Fargate) deploys. |
+| **01 (Python)** | [01-basic-ci.yml](.github/workflows/01-basic-ci.yml) | Base Continuous Integration (Python) | Code checkout, Python environment setup, dependency caching, Ruff linting, Black formatting, Pytest unit testing, artifact upload. |
+| **01 (NodeJS)** | [01-basic-ci-node.yml](.github/workflows/01-basic-ci-node.yml) | Base Continuous Integration (NodeJS) | Code checkout, Node.js environment setup, npm dependency caching, ESLint linting, Prettier formatting check, Jest unit testing, artifact upload. |
+| **02 (Python)** | [02-environments-matrix.yml](.github/workflows/02-environments-matrix.yml) | Parameterization & Environments (Python) | Multi-version testing matrix, environmental target scoping (`dev` vs. `prod`), environmental secrets, and conditional execution. |
+| **02 (NodeJS)** | [02-environments-matrix-node.yml](.github/workflows/02-environments-matrix-node.yml) | Parameterization & Environments (NodeJS) | Multi-version testing matrix, environmental target scoping (`dev` vs. `prod`), environmental secrets, and conditional execution. |
+| **03 (Python)** | [03-aws-oidc.yml](.github/workflows/03-aws-oidc.yml) | Secure Cloud Deployment (Python) | AWS OpenID Connect (OIDC) keyless authentication, Docker image construction, ECR pushes, and comparative setup for Legacy (EC2/Fabric) and Modern (ECS/Fargate) deploys. |
+| **03 (NodeJS)** | [03-aws-oidc-node.yml](.github/workflows/03-aws-oidc-node.yml) | Secure Cloud Deployment (NodeJS) | AWS OpenID Connect (OIDC) keyless authentication, Docker image construction, ECR pushes, and comparative setup for Legacy (EC2/SSH script) and Modern (ECS/Fargate) deploys. |
 | **04** | [04-terraform-cicd.yml](.github/workflows/04-terraform-cicd.yml) | Infrastructure as Code | Terraform formatting, validation, planning, commenting plans on PRs, and auto-applying plans inside environment gates. |
 
 ---

@@ -41,10 +41,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@f724c812feb0e3e4ad58ecdb0d97b0f62251a2b0 # v5.1.0
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
@@ -76,7 +76,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Deploy Application to Dev Environment
         # In a real pipeline, replace this echo block with actual deployment steps
@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Deploy Application to Prod Environment
         # ${{ secrets.DEPLOY_TARGET_API_KEY }} is pulled from the 'prod' environment context

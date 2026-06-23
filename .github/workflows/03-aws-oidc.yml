@@ -34,10 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@f724c812feb0e3e4ad58ecdb0d97b0f62251a2b0 # v5.1.0
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
@@ -64,11 +64,11 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       # Authenticate to AWS using OIDC (no static access keys or secrets needed in GitHub)
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }} # Environment-specific IAM Role ARN
           aws-region: us-west-2
@@ -76,7 +76,7 @@ jobs:
 
       - name: Log in to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@062b18b96a7aff079d4ed91453828c75460ed285 # v2.0.1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, Tag, and Push Image to ECR
         env:
@@ -106,10 +106,10 @@ jobs:
       name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials (for Fabric instance discovery or CLI tasks)
-        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
@@ -124,7 +124,7 @@ jobs:
           ssh-keyscan -H ${{ vars.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@f724c812feb0e3e4ad58ecdb0d97b0f62251a2b0 # v5.1.0
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
@@ -146,10 +146,10 @@ jobs:
       name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-west-2
@@ -165,7 +165,7 @@ jobs:
       # Update the image tag in the task definition JSON
       - name: Fill in new image ID in AWS ECS task definition
         id: render-task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@a22feac7c27632616f731174950fa070e1762140 # v1.2.0
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
           container-name: app
@@ -174,7 +174,7 @@ jobs:
       # Deploy the updated task definition to the ECS Service
       # This performs a rolling deployment (zero downtime, automatic rollback if health checks fail)
       - name: Deploy Amazon ECS task definition
-        uses: aws-actions/amazon-ecs-deploy-task-definition@8238ee2cf9338f0d8a562410a562215c0e4871de # v2.2.0
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-task-def.outputs.task-definition }}
           service: ${{ vars.ECS_SERVICE_NAME }}
