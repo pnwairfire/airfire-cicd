@@ -1,0 +1,136 @@
+# .github/workflows/04-terraform-cicd.yml
+# USFS AirFire CI/CD Style Guide: Level 4 - Infrastructure as Code (IaC) GitOps
+#
+# Educational Goals:
+# 1. Automate Terraform code format, validation, and planning.
+# 2. Authenticate Terraform to AWS securely using OIDC.
+# 3. Post Terraform plan results directly to Pull Request comments for visibility.
+# 4. Apply changes automatically during CD gates (push to main or tag vM.m.r).
+# 5. Handle environment-specific state files safely via subdirectories.
+
+name: "04 - Terraform IaC GitOps"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  id-token: write # Required for AWS OIDC credentials
+  contents: read # Required to checkout code
+  pull-requests: write # Required to post plan output as a comment on PRs
+
+jobs:
+  terraform-plan:
+    name: Terraform Format, Validate & Plan
+    runs-on: ubuntu-latest
+    # Execute on PRs to inspect plan before merging, or during pushes to verify
+    # Map to environments depending on branch or reference
+    environment:
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+    env:
+      TF_DIR: ./terraform/envs/${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
+
+      # Install specific Terraform CLI version
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd79b21352d301f80f1c9111e548d5781a5752 # v3.1.2
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        if: github.event_name == 'pull_request'
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -no-color -out=tfplan
+          # Capture plan summary to display in PR comment
+          plan_output=$(terraform show -no-color tfplan | grep -E 'Plan:|No changes.')
+          echo "PLAN_SUMMARY<<EOF" >> $GITHUB_ENV
+          echo "$plan_output" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # Automatically comment the plan summary back on the PR
+      - name: Post Plan to Pull Request
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const summary = process.env.PLAN_SUMMARY;
+            const output = `#### Terraform Plan Status: ⚙️
+            **Environment:** \`${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}\`
+            **Summary:** 
+            \`\`\`
+            ${summary}
+            \`\`\`
+            *Pushed by: @${context.actor}, Action: \`${context.eventName}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  terraform-apply:
+    name: Terraform Apply
+    needs: terraform-plan
+    runs-on: ubuntu-latest
+    # Execute ONLY on pushes to main/master or tags (CD triggers)
+    if: github.event_name == 'push'
+    environment:
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+    env:
+      TF_DIR: ./terraform/envs/${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd79b21352d301f80f1c9111e548d5781a5752 # v3.1.2
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform init
+
+      # Apply changes automatically. Safety: environment approvals prevent direct prod applies without review.
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform apply -auto-approve

@@ -1,0 +1,182 @@
+# .github/workflows/03-aws-oidc.yml
+# USFS AirFire CI/CD Style Guide: Level 3 - Secure Cloud Authentication & Deployment
+#
+# Educational Goals:
+# 1. Establish secure, keyless authentication to AWS via OpenID Connect (OIDC).
+# 2. Scope workflow token permissions tightly using the `permissions` block.
+# 3. Build and push Docker images to AWS ECR (Elastic Container Registry).
+# 4. Implement deployment paths for the two AirFire architectural footprints:
+#    - Legacy Footprint: EC2 + Docker Compose + Fabric deployment.
+#    - Modern Footprint: AWS ECS + Fargate deployment.
+
+name: "03 - AWS OIDC & Container Deployments"
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches:
+      - main
+      - master
+
+# Critical: Grant permissions required to fetch OIDC tokens from GitHub's OIDC provider
+permissions:
+  id-token: write # Required for requesting the JWT token
+  contents: read # Required for actions/checkout
+
+jobs:
+  ci-test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@f724c812feb0e3e4ad58ecdb0d97b0f62251a2b0 # v5.1.0
+        with:
+          enable-cache: true
+
+      - name: Install Dependencies
+        run: |
+          if [ -f pyproject.toml ]; then
+            uv sync --all-groups
+          elif [ -f requirements.txt ]; then
+            uv pip install -r requirements.txt
+            uv pip install pytest
+          else
+            uv pip install pytest
+          fi
+
+      - name: Run Tests
+        run: uv run pytest
+
+  # Build Docker Image and Push to Amazon ECR (Common to both deployment paths)
+  build-and-push:
+    name: Build & Push to ECR
+    needs: ci-test
+    runs-on: ubuntu-latest
+    # Execute only on pushes to main/master or release tags
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      # Authenticate to AWS using OIDC (no static access keys or secrets needed in GitHub)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }} # Environment-specific IAM Role ARN
+          aws-region: us-west-2
+          audience: sigsv.github.conformance # Optional: helps secure AWS STS token audience
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@062b18b96a7aff079d4ed91453828c75460ed285 # v2.0.1
+
+      - name: Build, Tag, and Push Image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: airfire-app
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          # Tag with environment name or version tag if applicable
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$TAG_NAME
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$TAG_NAME
+          else
+            docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest-dev
+            docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest-dev
+          fi
+
+  # Deployment Option A: Legacy Footprint (EC2 + Docker Compose + Fabric)
+  deploy-legacy:
+    name: Deploy (Legacy EC2/Fabric)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment:
+      # Map to dev or prod depending on git reference
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS Credentials (for Fabric instance discovery or CLI tasks)
+        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
+
+      # Setup SSH key for Fabric remote access
+      # SSH keys are retrieved from environment-specific GitHub secrets (never committed!)
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ vars.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@f724c812feb0e3e4ad58ecdb0d97b0f62251a2b0 # v5.1.0
+        with:
+          enable-cache: true
+
+      - name: Deploy with Fabric
+        # Use uv run with fabric as an ad-hoc dependency to run the fabric command
+        # Fabric connects via SSH to target EC2 node, runs 'docker compose pull' and restarts containers
+        run: |
+          uv run --with fabric fab deploy --host=${{ vars.DEPLOY_HOST }} --image-tag=${{ github.sha }}
+
+  # Deployment Option B: Modern Footprint (AWS ECS + Fargate)
+  deploy-modern:
+    name: Deploy (Modern ECS/Fargate)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # This job is disabled by default in this teaching guide. 
+    # To enable, uncomment the line below or delete deploy-legacy:
+    # if: false 
+    environment:
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'prod' || 'dev' }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e3dd8a4bbb33cb94027a195350c4c2be23d8c138 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-west-2
+
+      # Read the current task definition from AWS or from files
+      - name: Download Task Definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ${{ vars.ECS_TASK_DEFINITION_NAME }} \
+            --query taskDefinition \
+            > task-definition.json
+
+      # Update the image tag in the task definition JSON
+      - name: Fill in new image ID in AWS ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@a22feac7c27632616f731174950fa070e1762140 # v1.2.0
+        with:
+          task-definition: task-definition.json
+          container-name: app
+          image: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com/airfire-app:${{ github.sha }}
+
+      # Deploy the updated task definition to the ECS Service
+      # This performs a rolling deployment (zero downtime, automatic rollback if health checks fail)
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@8238ee2cf9338f0d8a562410a562215c0e4871de # v2.2.0
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ vars.ECS_SERVICE_NAME }}
+          cluster: ${{ vars.ECS_CLUSTER_NAME }}
+          wait-for-service-stability: true

@@ -1,0 +1,84 @@
+# .github/workflows/01-basic-ci.yml
+# USFS AirFire CI/CD Style Guide: Level 1 - Basic Continuous Integration
+#
+# Educational Goals:
+# 1. Understand GitHub Actions triggers (`on: pull_request`).
+# 2. Learn the structure of jobs, steps, and runners.
+# 3. Enforce code quality using linting/formatting checks.
+# 4. Run automated test suites before code integration.
+# 5. Practice the security rule of pinning actions to full commit SHAs.
+
+name: "01 - Basic CI (Linting & Testing)"
+
+on:
+  pull_request:
+    # Trigger CI on PRs into main or master branches to protect target branches
+    branches:
+      - main
+      - master
+    # Only trigger when relevant code files are changed
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+
+# Restrict default permissions of GITHUB_TOKEN to read-only for security
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Format Checks
+    runs-on: ubuntu-latest
+    steps:
+      # Pin actions using full commit SHAs to prevent supply-chain attacks (AirFire convention)
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fbca3061306e5d6226793d5402095df # v5.3.0
+        with:
+          python-version: "3.11"
+          cache: "pip" # Enables automatic pip dependency caching
+
+      - name: Install Linting Tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black
+
+      - name: Run Ruff Linter
+        run: ruff check .
+
+      - name: Run Black Formatter Check
+        run: black --check .
+
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    # Run tests in parallel with lint checks, or define dependencies if needed
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fbca3061306e5d6226793d5402095df # v5.3.0
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-cov
+
+      - name: Run Tests with Coverage
+        run: pytest --cov=./ --cov-report=xml
+
+      # Upload coverage artifacts as a teaching demo of sharing artifacts
+      - name: Upload Test Coverage Report
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: code-coverage-report
+          path: coverage.xml
+          retention-days: 7
