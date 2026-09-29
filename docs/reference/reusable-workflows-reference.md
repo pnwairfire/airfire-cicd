@@ -85,3 +85,35 @@ Executes Infrastructure-as-Code formatting, static analysis, and configuration v
 | `run-validate` | `boolean` | No | `true` | Executes `terraform init -backend=false && terraform validate`. |
 | `run-tflint` | `boolean` | No | `true` | Executes `tflint --init && tflint --recursive`. |
 | `working-directory` | `string` | No | `"."` | Directory containing Terraform HCL root. |
+
+---
+
+## 5. Versioning & Moving Floating Tags
+
+To balance workflow stability with automatic adoption of bug fixes and performance updates across consuming repositories, `airfire-cicd` workflows follow the **floating major tag** pattern.
+
+### Operational Workflow for Releasing Updates
+
+1. **Commit workflow updates to `main`**:
+   ```bash
+   git add .github/workflows/reusable-*.yml
+   git commit -m "feat(python): add ruff format check to reusable-python.yml"
+   git push origin main
+   ```
+
+2. **Tag an immutable SemVer point release (recommended)**:
+   Always track specific versions with explicit tags for provenance:
+   ```bash
+   git tag -a v1.1.0 -m "Release v1.1.0"
+   git push origin v1.1.0
+   ```
+
+3. **Advance the floating major tag (`v1`)**:
+   Point the floating tag `v1` to the newly updated commit using `git tag -fa` and force-push the tag:
+   ```bash
+   git tag -fa v1 -m "Update v1 reusable workflows to v1.1.0"
+   git push origin v1 --force
+   ```
+
+### Consumer Impact
+Any repository referencing `@v1` (e.g. `uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1`) automatically executes the updated workflow on its next pull request or push without modifying its own repository files.

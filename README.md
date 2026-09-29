@@ -97,3 +97,32 @@ jobs:
     with:
       python-version: "3.12"
 ```
+
+### Versioning & Moving Floating Tags
+
+AirFire reusable workflows use standard Git tags for versioning. To provide consumer repositories with automatic stability and non-breaking bug fixes, we maintain **floating major version tags** (such as `v1`):
+
+* **Consumer Repositories**: Pin to the major version tag (e.g. `@v1`).
+* **Maintenance Workflow**: When updating, fixing, or improving reusable workflows in this repository:
+
+1. **Commit changes to `main`**:
+   ```bash
+   git add .
+   git commit -m "feat(python): add ruff format check to reusable-python.yml"
+   git push origin main
+   ```
+
+2. **Tag an immutable SemVer point release (recommended)**:
+   ```bash
+   git tag -a v1.1.0 -m "Release v1.1.0"
+   git push origin v1.1.0
+   ```
+
+3. **Advance the floating major tag (`v1`)**:
+   Use `-f` (force) to move the `v1` tag pointer to the latest commit:
+   ```bash
+   git tag -fa v1 -m "Update v1 reusable workflows to v1.1.0"
+   git push origin v1 --force
+   ```
+
+All consumer repositories referencing `@v1` will automatically inherit the update on their next workflow execution without requiring any code changes.
