@@ -1,0 +1,93 @@
+name: "Reusable Python CI (uv, ruff, pytest)"
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version to install"
+        required: false
+        type: string
+        default: "3.12"
+      run-ruff:
+        description: "Execute ruff check and ruff format --check"
+        required: false
+        type: boolean
+        default: true
+      run-tests:
+        description: "Execute pytest suite"
+        required: false
+        type: boolean
+        default: true
+      pytest-args:
+        description: "Arguments to pass to pytest"
+        required: false
+        type: string
+        default: "-v"
+      working-directory:
+        description: "Directory containing python project"
+        required: false
+        type: string
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  python-quality-gates:
+    name: Python Quality Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "latest"
+
+      - name: Set up Python ${{ inputs.python-version }}
+        run: uv python install ${{ inputs.python-version }}
+
+      - name: Install Project Dependencies
+        shell: bash
+        run: |
+          if [ -f "pyproject.toml" ]; then
+            echo "==> Syncing dependencies via uv sync..."
+            uv sync --frozen || uv sync
+          elif [ -f "requirements.txt" ]; then
+            echo "==> Creating hermetic venv and installing requirements.txt..."
+            uv venv
+            uv pip install -r requirements.txt
+            if [ "${{ inputs.run-ruff }}" = "true" ]; then
+              uv pip install ruff
+            fi
+            if [ "${{ inputs.run-tests }}" = "true" ]; then
+              uv pip install pytest
+            fi
+          else
+            echo "==> No pyproject.toml or requirements.txt found; running in standalone mode."
+          fi
+
+      - name: Lint and Format Verification (Ruff)
+        if: ${{ inputs.run-ruff }}
+        shell: bash
+        run: |
+          echo "==> Running ruff check..."
+          uv run ruff check .
+          echo "==> Running ruff format --check..."
+          uv run ruff format --check .
+
+      - name: Test Suite (pytest)
+        if: ${{ inputs.run-tests }}
+        shell: bash
+        run: |
+          if [ -d "tests" ] || [ -f "test_*.py" ] || [ -f "*_test.py" ]; then
+            echo "==> Running pytest with args: ${{ inputs.pytest-args }}..."
+            uv run pytest ${{ inputs.pytest-args }}
+          else
+            echo "==> No test files found. Skipping pytest."
+          fi

@@ -1,0 +1,92 @@
+name: "Reusable Node.js CI (Lint, Test, Build)"
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: "Node.js version to install"
+        required: false
+        type: string
+        default: "20"
+      package-manager:
+        description: "Package manager (npm or pnpm)"
+        required: false
+        type: string
+        default: "npm"
+      run-lint:
+        description: "Run linter (npm run lint / eslint)"
+        required: false
+        type: boolean
+        default: true
+      run-test:
+        description: "Run unit test suite"
+        required: false
+        type: boolean
+        default: true
+      run-build:
+        description: "Run build script to verify bundle"
+        required: false
+        type: boolean
+        default: true
+      working-directory:
+        description: "Working directory for Node application"
+        required: false
+        type: string
+        default: "."
+
+permissions:
+  contents: read
+
+jobs:
+  node-quality-gates:
+    name: Node.js Quality Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ inputs.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: ${{ inputs.package-manager }}
+
+      - name: Install Dependencies
+        shell: bash
+        run: |
+          if [ -f "package-lock.json" ]; then
+            npm ci
+          elif [ -f "pnpm-lock.yaml" ]; then
+            pnpm install --frozen-lockfile
+          elif [ -f "package.json" ]; then
+            npm install
+          else
+            echo "No package.json found. Skipping install."
+          fi
+
+      - name: Lint Verification
+        if: ${{ inputs.run-lint }}
+        shell: bash
+        run: |
+          if [ -f "package.json" ]; then
+            npm run lint --if-present
+          fi
+
+      - name: Unit Tests
+        if: ${{ inputs.run-test }}
+        shell: bash
+        run: |
+          if [ -f "package.json" ]; then
+            npm test --if-present
+          fi
+
+      - name: Build Verification
+        if: ${{ inputs.run-build }}
+        shell: bash
+        run: |
+          if [ -f "package.json" ]; then
+            npm run build --if-present
+          fi

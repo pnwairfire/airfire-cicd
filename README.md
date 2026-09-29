@@ -56,3 +56,45 @@ Workflows conform to the following AirFire branch and tag triggers:
                      Deploys to 'prod' Environment
               (Requires manual approval gate on GitHub)
 ```
+
+---
+
+## 4. Central Reusable Workflows (`@v1`)
+
+AirFire repositories standardize their pull request quality gates by calling shared `workflow_call` templates published from this repository. Workflows are tagged under floating major version `@v1` for automatic stability and non-breaking tool updates.
+
+### Available Reusable Workflows
+
+| Reusable Workflow | Focus & Quality Gates | Key Inputs & Defaults |
+| :--- | :--- | :--- |
+| **`reusable-docs.yml`** | Diátaxis frontmatter, namespace `README.md` hubs, markdownlint | `docs_path: "docs"`, `validate_frontmatter: true`, `run_markdownlint: true` |
+| **`reusable-python.yml`** | `uv` dependency sync, `ruff check`, `ruff format`, `pytest` | `python-version: "3.12"`, `run-ruff: true`, `run-tests: true`, `pytest-args: "-v"` |
+| **`reusable-node.yml`** | `npm`/`pnpm` cache, ESLint, unit testing, build check | `node-version: "20"`, `package-manager: "npm"`, `run-lint: true`, `run-test: true`, `run-build: true` |
+| **`reusable-terraform.yml`** | `terraform fmt`, `tflint`, `terraform validate` | `terraform-version: "1.9.0"`, `run-fmt: true`, `run-validate: true`, `run-tflint: true` |
+
+### Consumer Repository Example
+
+In contributing repositories, create `.github/workflows/ci.yml`:
+
+```yaml
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  docs-quality-gates:
+    name: Documentation
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
+    with:
+      docs_path: "docs"
+
+  python-ci:
+    name: Python Pipeline
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-python.yml@v1
+    with:
+      python-version: "3.12"
+```

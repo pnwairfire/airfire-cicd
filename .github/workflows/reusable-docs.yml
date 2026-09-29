@@ -1,0 +1,129 @@
+name: "Reusable Documentation Quality Gates"
+
+on:
+  workflow_call:
+    inputs:
+      docs_path:
+        description: "Relative path to documentation directory"
+        required: false
+        type: string
+        default: "docs"
+      validate_frontmatter:
+        description: "Enforce Diátaxis frontmatter and namespace README hubs"
+        required: false
+        type: boolean
+        default: true
+      run_markdownlint:
+        description: "Run markdownlint-cli2 checks"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-documentation:
+    name: Documentation Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: ${{ inputs.validate_frontmatter }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Validation Dependencies
+        if: ${{ inputs.validate_frontmatter }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Validate Diátaxis Frontmatter & Namespace Hubs
+        if: ${{ inputs.validate_frontmatter }}
+        shell: bash
+        run: |
+          DOCS_DIR="${{ inputs.docs_path }}"
+          if [ ! -d "$DOCS_DIR" ]; then
+            echo "Documentation directory '$DOCS_DIR' not found. Skipping."
+            exit 0
+          fi
+
+          python3 - << 'PYEOF'
+          import sys
+          import yaml
+          from pathlib import Path
+
+          docs_dir = Path("${{ inputs.docs_path }}")
+          errors = []
+          REQUIRED_FIELDS = ["title", "description", "published", "editor", "tags"]
+
+          print(f"==> Auditing documentation in {docs_dir.resolve()}...")
+
+          # 1. Namespace README.md Hub Check
+          subdirs = [d for d in docs_dir.glob("**/") if d.is_dir() and not d.name.startswith(".")]
+          for d in subdirs:
+              readme = d / "README.md"
+              if not readme.exists():
+                  errors.append(f"Missing namespace hub: {d}/README.md does not exist.")
+
+          # 2. Frontmatter & Heading Checks
+          md_files = sorted(docs_dir.glob("**/*.md"))
+          for md in md_files:
+              rel = md.relative_to(docs_dir)
+              text = md.read_text(encoding="utf-8")
+              
+              if not text.startswith("---"):
+                  errors.append(f"{rel}: Missing YAML frontmatter marker '---' at start of file.")
+                  continue
+              
+              parts = text.split("---", 2)
+              if len(parts) < 3:
+                  errors.append(f"{rel}: Incomplete YAML frontmatter fence.")
+                  continue
+              
+              fm_text = parts[1]
+              try:
+                  data = yaml.safe_load(fm_text) or {}
+              except Exception as e:
+                  errors.append(f"{rel}: YAML parsing error in frontmatter: {e}")
+                  continue
+              
+              for field in REQUIRED_FIELDS:
+                  if field not in data:
+                      errors.append(f"{rel}: Frontmatter missing required field '{field}'.")
+                  elif data[field] is None or data[field] == "":
+                      errors.append(f"{rel}: Frontmatter field '{field}' is empty.")
+              
+              if data.get("editor") != "markdown":
+                  errors.append(f"{rel}: Frontmatter 'editor' must be explicitly set to 'markdown'.")
+              
+              if not isinstance(data.get("tags"), list):
+                  errors.append(f"{rel}: Frontmatter 'tags' must be a list.")
+
+          if errors:
+              print("\n❌ Documentation Quality Gate Failures:")
+              for err in errors:
+                  print(f"  - {err}")
+              sys.exit(1)
+          else:
+              print(f"\n✅ All {len(md_files)} markdown files and {len(subdirs)} namespace hubs passed Diátaxis validation.")
+          PYEOF
+
+      - name: Set up Node.js
+        if: ${{ inputs.run_markdownlint }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run Markdown Linting (markdownlint-cli2)
+        if: ${{ inputs.run_markdownlint }}
+        shell: bash
+        run: |
+          DOCS_DIR="${{ inputs.docs_path }}"
+          if [ -d "$DOCS_DIR" ]; then
+            npx --yes markdownlint-cli2 "${DOCS_DIR}/**/*.md"
+          fi
