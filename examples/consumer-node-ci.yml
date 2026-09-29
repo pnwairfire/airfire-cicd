@@ -1,0 +1,42 @@
+# examples/consumer-node-ci.yml
+# USFS AirFire CI/CD: Consumer Caller Template for Node.js Repositories
+#
+# Usage:
+# 1. Copy this file to '.github/workflows/ci.yml' in your repository.
+# 2. Configure package-manager ('npm' or 'pnpm') and node-version.
+# 3. Workflows are pinned to floating tag '@v1' for automatic non-breaking updates.
+
+name: Continuous Integration & Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-quality-gates:
+    name: Documentation
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
+    with:
+      docs_path: "docs"
+      validate_frontmatter: true
+      run_markdownlint: true
+
+  node-quality-gates:
+    name: Node.js Pipeline
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-node.yml@v1
+    with:
+      node-version: "20"
+      package-manager: "npm"
+      run-lint: true
+      run-test: true
+      run-build: true

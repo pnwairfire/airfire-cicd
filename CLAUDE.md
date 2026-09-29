@@ -1,17 +1,17 @@
 # CLAUDE.md Guidelines for USFS AirFire CI/CD
 
-This repository contains Continuous Integration and Continuous Deployment (CI/CD) standards, documentation, and progressive GitHub Actions workflow examples for the USFS AirFire research group.
+This repository contains Continuous Integration and Continuous Deployment (CI/CD) standards, documentation, central reusable GitHub Actions workflows (`@v1`), and consumer caller templates for the USFS AirFire research group.
 
 ## Code Quality and Verification Commands
 While this is a template and style guide repository rather than a runtime application, agents and developers should verify workflow syntax and document formatting using the following tools:
 
-- **Lint and Validate GitHub Workflows**: Use [actionlint](https://github.com/rhysd/actionlint) to catch syntax errors or incorrect schema usage in `.github/workflows/`.
+- **Lint and Validate GitHub Workflows**: Use [actionlint](https://github.com/rhysd/actionlint) to catch syntax errors or incorrect schema usage in `.github/workflows/` and `examples/`:
   ```bash
-  actionlint
+  actionlint .github/workflows/*.yml examples/*.yml
   ```
 - **Format and Lint Markdown**: Use markdownlint to enforce formatting across the docs:
   ```bash
-  markdownlint docs/ README.md
+  markdownlint docs/ README.md examples/README.md
   ```
 - **Verify Link Portability**: Ensure relative paths are used for all documentation references (enforced by the workspace `enforce-relative-paths` skill).
 

@@ -1,0 +1,52 @@
+# examples/consumer-polyglot-ci.yml
+# USFS AirFire CI/CD: Consumer Caller Template for Polyglot / Full-Stack Repositories
+#
+# Usage:
+# 1. Copy this file to '.github/workflows/ci.yml' in your repository.
+# 2. Configure working-directory paths to point to your backend and frontend subfolders.
+# 3. Workflows are pinned to floating tag '@v1' for automatic non-breaking updates.
+
+name: Continuous Integration & Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-quality-gates:
+    name: Documentation
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
+    with:
+      docs_path: "docs"
+      validate_frontmatter: true
+      run_markdownlint: true
+
+  backend-quality-gates:
+    name: Python Backend
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-python.yml@v1
+    with:
+      python-version: "3.12"
+      working-directory: "backend"
+      run-ruff: true
+      run-tests: true
+
+  frontend-quality-gates:
+    name: Frontend Application
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-node.yml@v1
+    with:
+      node-version: "20"
+      package-manager: "npm"
+      working-directory: "frontend"
+      run-lint: true
+      run-test: true
+      run-build: true

@@ -123,38 +123,28 @@ For new applications, compute is serverless and managed natively by AWS.
 
 ---
 
-## 5. Overview of Progressive Example Workflows
+## 5. Overview of Consumer Caller Workflow Templates
 
-The repository contains four progressive workflows located under the `.github/workflows/` directory:
+Rather than writing custom, unmaintained pipeline scripts, AirFire repositories call centralized reusable workflows (`@v1`) hosted in this repository. Ready-to-use caller templates are available under the [`examples/`](../examples/) directory:
 
-1. **Level 1: Basic Continuous Integration**
-   - **Python**:
-     - File Path: [01-basic-ci.yml](../.github/workflows/01-basic-ci.yml)
-     - Scope: Checks code linting and formatting (Ruff, Black) and runs automated test suites (pytest) on pull requests.
-   - **NodeJS**:
-     - File Path: [01-basic-ci-node.yml](../.github/workflows/01-basic-ci-node.yml)
-     - Scope: Checks code linting and formatting (ESLint, Prettier) and runs automated test suites (Jest) on pull requests.
-   - Purpose: Establishes base quality gates before merging.
+1. **Python Archetype**
+   - File Path: [`consumer-python-ci.yml`](../examples/consumer-python-ci.yml)
+   - Scope: Runs documentation quality gates (`reusable-docs.yml@v1`) and Python quality gates (`reusable-python.yml@v1`) using Astral `uv`, `ruff check`, `ruff format`, and `pytest`.
+   - Purpose: Standard continuous integration for Python services, CLI utilities, and data processing tasks.
 
-2. **Level 2: Matrix Builds and Environments**
-   - **Python**:
-     - File Path: [02-environments-matrix.yml](../.github/workflows/02-environments-matrix.yml)
-     - Scope: Introduces Python runtime testing matrices and separates deployment jobs for `dev` and `prod` environments based on branch pushes and versioned tags.
-   - **NodeJS**:
-     - File Path: [02-environments-matrix-node.yml](../.github/workflows/02-environments-matrix-node.yml)
-     - Scope: Introduces NodeJS version testing matrices and separates deployment jobs for `dev` and `prod` environments based on branch pushes and versioned tags.
-   - Purpose: Demonstrates environmental routing and parameterization.
+2. **Node.js Archetype**
+   - File Path: [`consumer-node-ci.yml`](../examples/consumer-node-ci.yml)
+   - Scope: Runs documentation quality gates (`reusable-docs.yml@v1`) and Node.js quality gates (`reusable-node.yml@v1`) with package manager caching (`npm` or `pnpm`), ESLint, Jest/Vitest unit tests, and bundle verification.
+   - Purpose: Standard continuous integration for JavaScript/TypeScript frontend applications and services.
 
-3. **Level 3: Secure AWS Deployment**
-   - **Python**:
-     - File Path: [03-aws-oidc.yml](../.github/workflows/03-aws-oidc.yml)
-     - Scope: Adds AWS OIDC configuration and container image builds. Illustrates deployment setups for both the legacy (EC2/Fabric) and modern (ECS/Fargate) execution footprints.
-   - **NodeJS**:
-     - File Path: [03-aws-oidc-node.yml](../.github/workflows/03-aws-oidc-node.yml)
-     - Scope: Adds AWS OIDC configuration and container image builds. Illustrates deployment setups for both the legacy (EC2/SSH script) and modern (ECS/Fargate) execution footprints.
-   - Purpose: Teaches secure cloud authentication and Docker deployment patterns.
+3. **Terraform Archetype**
+   - File Path: [`consumer-terraform-ci.yml`](../examples/consumer-terraform-ci.yml)
+   - Scope: Runs documentation quality gates (`reusable-docs.yml@v1`) and Terraform quality gates (`reusable-terraform.yml@v1`) enforcing `terraform fmt`, `tflint`, and `terraform validate`.
+   - Purpose: Infrastructure-as-Code linting and validation on pull requests.
 
-4. **Level 4: Infrastructure as Code (IaC) GitOps**
-   - File Path: [04-terraform-cicd.yml](../.github/workflows/04-terraform-cicd.yml)
-   - Scope: Implements validation and planning for Terraform code. Automates posting the planned changes back to pull requests as comments and auto-applies configurations on merge.
-   - Purpose: Integrates cloud resource provisioning into the software delivery pipeline.
+4. **Polyglot Archetype**
+   - File Path: [`consumer-polyglot-ci.yml`](../examples/consumer-polyglot-ci.yml)
+   - Scope: Demonstrates composition of multiple quality gates in a single pipeline across discrete project subdirectories (`backend` and `frontend`).
+   - Purpose: Full-stack applications containing both Python API servers and web client interfaces.
+
+For step-by-step onboarding instructions, consult the [Repository Migration Runbook](how-to/migrating-a-repo-to-standard-ci.md).

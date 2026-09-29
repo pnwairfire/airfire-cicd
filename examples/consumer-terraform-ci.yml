@@ -1,0 +1,42 @@
+# examples/consumer-terraform-ci.yml
+# USFS AirFire CI/CD: Consumer Caller Template for Terraform IaC Repositories
+#
+# Usage:
+# 1. Copy this file to '.github/workflows/ci.yml' in your repository.
+# 2. Configure terraform-version or working-directory if Terraform code lives in a subfolder.
+# 3. Workflows are pinned to floating tag '@v1' for automatic non-breaking updates.
+
+name: Continuous Integration & Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-quality-gates:
+    name: Documentation
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
+    with:
+      docs_path: "docs"
+      validate_frontmatter: true
+      run_markdownlint: true
+
+  terraform-quality-gates:
+    name: Terraform Pipeline
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-terraform.yml@v1
+    with:
+      terraform-version: "1.9.0"
+      run-fmt: true
+      run-validate: true
+      run-tflint: true
+      working-directory: "."

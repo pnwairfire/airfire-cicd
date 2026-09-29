@@ -1,0 +1,41 @@
+# examples/consumer-python-ci.yml
+# USFS AirFire CI/CD: Consumer Caller Template for Python Repositories
+#
+# Usage:
+# 1. Copy this file to '.github/workflows/ci.yml' in your repository.
+# 2. Adjust python-version or input flags as needed.
+# 3. Workflows are pinned to floating tag '@v1' for automatic non-breaking updates.
+
+name: Continuous Integration & Quality Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-quality-gates:
+    name: Documentation
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
+    with:
+      docs_path: "docs"
+      validate_frontmatter: true
+      run_markdownlint: true
+
+  python-quality-gates:
+    name: Python Pipeline
+    uses: pnwairfire/airfire-cicd/.github/workflows/reusable-python.yml@v1
+    with:
+      python-version: "3.12"
+      run-ruff: true
+      run-tests: true
+      pytest-args: "-v"
