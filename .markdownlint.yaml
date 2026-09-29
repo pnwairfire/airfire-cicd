@@ -1,0 +1,67 @@
+# Markdownlint configuration for AirFire Knowledge Base and documentation
+
+default: true
+
+# MD013/line-length - Allow long lines for wide tables, ASCII diagrams, and long URLs
+MD013: false
+
+# MD024/no-duplicate-heading - Allow duplicate headings if in different parent sections
+MD024:
+  siblings_only: true
+
+# MD033/no-inline-html - Allow inline HTML (badges, details tags, alignment)
+MD033: false
+
+# MD025/single-title/single-h1 - Disable because YAML frontmatter title + H1 can be flagged
+MD025: false
+
+# MD004/ul-style - Unordered list style: allow standard markdown list markers
+MD004: false
+
+# MD009/no-trailing-spaces - Relaxed for markdown two-space linebreaks
+MD009: false
+
+# MD012/no-multiple-blanks - Relaxed for spacing around callouts
+MD012: false
+
+# MD022/blanks-around-headings - Relaxed
+MD022: false
+
+# MD026/no-trailing-punctuation - Relaxed for colons in headings
+MD026: false
+
+# MD029/ol-prefix - Relaxed for flexible ordered list prefixes
+MD029: false
+
+# MD031/blanks-around-fences - Relaxed for compact lists
+MD031: false
+
+# MD032/blanks-around-lists - Relaxed for compact checklists
+MD032: false
+
+# MD034/no-bare-urls - Relaxed for plain URLs in text
+MD034: false
+
+# MD036/no-emphasis-as-heading - Relaxed for lead callouts and status lines
+MD036: false
+
+# MD037/no-space-in-emphasis - Relaxed for arithmetic multiplication signs in tables
+MD037: false
+
+# MD040/fenced-code-language - Relaxed for preformatted blocks
+MD040: false
+
+# MD041/first-line-heading - Disabled for frontmatter-first markdown files
+MD041: false
+
+# MD047/single-trailing-newline - Relaxed
+MD047: false
+
+# MD049/emphasis-style - Relaxed (both underscore and asterisk allowed)
+MD049: false
+
+# MD058/blanks-around-tables - Relaxed
+MD058: false
+
+# MD060/table-column-style - Relaxed for variable width tables
+MD060: false
