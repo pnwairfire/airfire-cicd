@@ -1,1 +1,4 @@
+# Agent skills
+.agents/skills/*
+!.agents/skills/airfire-cicd/
 skills-lock.json
