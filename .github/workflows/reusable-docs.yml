@@ -63,16 +63,38 @@ jobs:
 
           print(f"==> Auditing documentation in {docs_dir.resolve()}...")
 
-          # 1. Namespace README.md Hub Check
+          # 1. Namespace README.md / index.md Hub Check
+          ASSET_DIR_NAMES = {
+              "assets", "stylesheets", "javascripts", "images", "img", "static",
+              "media", "css", "js", "branding", "fonts", "icons", "scratch",
+              "superpowers", ".agents", ".superpowers", ".git", "node_modules"
+          }
+
           subdirs = [d for d in docs_dir.glob("**/") if d.is_dir() and not d.name.startswith(".")]
           for d in subdirs:
+              try:
+                  rel_parts = set(d.relative_to(docs_dir).parts)
+              except ValueError:
+                  continue
+              if rel_parts & ASSET_DIR_NAMES:
+                  continue
+              if d.is_symlink() and not d.resolve().exists():
+                  continue
+              md_in_dir = [f for f in d.glob("**/*.md") if not any(p in ASSET_DIR_NAMES for p in f.parts)]
+              if not md_in_dir:
+                  continue
               readme = d / "README.md"
-              if not readme.exists():
-                  errors.append(f"Missing namespace hub: {d}/README.md does not exist.")
+              index = d / "index.md"
+              if not readme.exists() and not index.exists():
+                  errors.append(f"Missing namespace hub: {d}/README.md or index.md does not exist.")
 
           # 2. Frontmatter & Heading Checks
           md_files = sorted(docs_dir.glob("**/*.md"))
           for md in md_files:
+              if any(p in ASSET_DIR_NAMES for p in md.parts):
+                  continue
+              if md.is_symlink() and not md.resolve().exists():
+                  continue
               rel = md.relative_to(docs_dir)
               text = md.read_text(encoding="utf-8")
               

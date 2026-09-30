@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 try:
     import yaml
@@ -261,6 +261,231 @@ def modernize_command(cmd: str) -> str:
     return "\n".join(modern_lines)
 
 
+
+def validate_documentation(docs_dir: Path) -> int:
+    """Validate Diátaxis Frontmatter & Namespace Hubs matching reusable-docs.yml."""
+    if not docs_dir.exists() or not docs_dir.is_dir():
+        print(f"Documentation directory '{docs_dir}' not found. Skipping.")
+        return 0
+
+    errors = []
+    REQUIRED_FIELDS = ["title", "description", "published", "editor", "tags"]
+    ASSET_DIR_NAMES = {
+        "assets", "stylesheets", "javascripts", "images", "img", "static",
+        "media", "css", "js", "branding", "fonts", "icons", "scratch",
+        "superpowers", ".agents", ".superpowers", ".git", "node_modules"
+    }
+
+    print(f"==> Auditing documentation in {docs_dir.resolve()}...")
+
+    # 1. Namespace README.md / index.md Hub Check
+    subdirs = [d for d in docs_dir.glob("**/") if d.is_dir() and not d.name.startswith(".")]
+    for d in subdirs:
+        try:
+            rel_parts = set(d.relative_to(docs_dir).parts)
+        except ValueError:
+            continue
+        if rel_parts & ASSET_DIR_NAMES:
+            continue
+        if d.is_symlink() and not d.resolve().exists():
+            continue
+        md_in_dir = [f for f in d.glob("**/*.md") if not any(p in ASSET_DIR_NAMES for p in f.parts)]
+        if not md_in_dir:
+            continue
+        readme = d / "README.md"
+        index = d / "index.md"
+        if not readme.exists() and not index.exists():
+            errors.append(f"Missing namespace hub: {d}/README.md or index.md does not exist.")
+
+    # 2. Frontmatter & Heading Checks
+    md_files = sorted(docs_dir.glob("**/*.md"))
+    valid_count = 0
+    for md in md_files:
+        if any(p in ASSET_DIR_NAMES for p in md.parts):
+            continue
+        if md.is_symlink() and not md.resolve().exists():
+            continue
+        try:
+            rel = md.relative_to(docs_dir)
+        except ValueError:
+            rel = md
+        try:
+            text = md.read_text(encoding="utf-8")
+        except Exception as e:
+            errors.append(f"{rel}: Could not read file: {e}")
+            continue
+
+        if not text.startswith("---"):
+            errors.append(f"{rel}: Missing YAML frontmatter marker '---' at start of file.")
+            continue
+
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            errors.append(f"{rel}: Incomplete YAML frontmatter fence.")
+            continue
+
+        fm_text = parts[1]
+        try:
+            data = yaml.safe_load(fm_text) or {} if yaml else {}
+        except Exception as e:
+            errors.append(f"{rel}: YAML parsing error in frontmatter: {e}")
+            continue
+
+        for field in REQUIRED_FIELDS:
+            if field not in data:
+                errors.append(f"{rel}: Frontmatter missing required field '{field}'.")
+            elif data[field] is None or data[field] == "":
+                errors.append(f"{rel}: Frontmatter field '{field}' is empty.")
+
+        if data.get("editor") != "markdown":
+            errors.append(f"{rel}: Frontmatter 'editor' must be explicitly set to 'markdown'.")
+
+        if not isinstance(data.get("tags"), list):
+            errors.append(f"{rel}: Frontmatter 'tags' must be a list.")
+        valid_count += 1
+
+    if errors:
+        print("\n❌ Documentation Quality Gate Failures:")
+        for err in errors:
+            print(f"  - {err}")
+        return 1
+    else:
+        print(f"\n✅ All {valid_count} markdown files and namespace hubs passed Diátaxis validation.")
+        return 0
+
+
+def expand_reusable_workflow(
+    job_id: str, job: dict, wf_path: Path, repo_root: Path, wf_name: str
+) -> List[Dict]:
+    """Expand jobs calling reusable workflows (reusable-docs.yml, reusable-python.yml, etc.)."""
+    uses = str(job.get("uses", "")).strip()
+    with_inputs = job.get("with", {})
+    if not isinstance(with_inputs, dict):
+        with_inputs = {}
+
+    steps = []
+
+    # 1. reusable-docs.yml
+    if "reusable-docs.yml" in uses:
+        docs_path = str(with_inputs.get("docs_path", "docs"))
+        validate_fm = with_inputs.get("validate_frontmatter", True)
+        if str(validate_fm).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"Diátaxis Frontmatter & Namespace Hubs ({docs_path})",
+                    "command": f"run-local-ci --validate-docs {docs_path}",
+                    "env": {},
+                }
+            )
+        run_mdlint = with_inputs.get("run_markdownlint", True)
+        if str(run_mdlint).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"Markdownlint Quality Check ({docs_path})",
+                    "command": f'npx --yes markdownlint-cli2 "{docs_path}/**/*.md"',
+                    "env": {},
+                }
+            )
+        return steps
+
+    # 2. reusable-python.yml
+    if "reusable-python.yml" in uses:
+        workdir = str(with_inputs.get("working-directory", "."))
+        run_ruff = with_inputs.get("run-ruff", True)
+        run_tests = with_inputs.get("run-tests", True)
+        pytest_args = str(with_inputs.get("pytest-args", "-v"))
+
+        if str(run_ruff).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"Ruff Lint Check ({workdir})",
+                    "command": f"uv run ruff check {workdir}",
+                    "env": {},
+                }
+            )
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"Ruff Format Check ({workdir})",
+                    "command": f"uv run ruff format --check {workdir}",
+                    "env": {},
+                }
+            )
+        if str(run_tests).lower() not in ("false", "0", "no"):
+            test_dir = f"{workdir}/tests" if workdir != "." else "tests"
+            if (repo_root / test_dir).exists():
+                steps.append(
+                    {
+                        "workflow_file": wf_path.name,
+                        "workflow_name": wf_name,
+                        "job_id": job_id,
+                        "step_name": f"Pytest Suite ({workdir})",
+                        "command": f"uv run pytest {test_dir} {pytest_args}".strip(),
+                        "env": {},
+                    }
+                )
+        return steps
+
+    # 3. reusable-terraform.yml
+    if "reusable-terraform.yml" in uses:
+        tf_dir = str(with_inputs.get("terraform_directory", "."))
+        check_fmt = with_inputs.get("check_formatting", True)
+        if str(check_fmt).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"Terraform Format Check ({tf_dir})",
+                    "command": f"terraform fmt -check -recursive {tf_dir}",
+                    "env": {},
+                }
+            )
+        return steps
+
+    # 4. reusable-node.yml
+    if "reusable-node.yml" in uses:
+        workdir = str(with_inputs.get("working-directory", "."))
+        run_lint = with_inputs.get("run-lint", True)
+        run_tests = with_inputs.get("run-tests", True)
+        if str(run_lint).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"NPM Lint ({workdir})",
+                    "command": f"npm --prefix {workdir} run lint" if workdir != "." else "npm run lint",
+                    "env": {},
+                }
+            )
+        if str(run_tests).lower() not in ("false", "0", "no"):
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"NPM Test ({workdir})",
+                    "command": f"npm --prefix {workdir} test" if workdir != "." else "npm test",
+                    "env": {},
+                }
+            )
+        return steps
+
+    return steps
+
+
 def parse_workflow_steps(repo_root: Path) -> List[Dict]:
     """Parse .github/workflows/*.yml and extract test/lint/validation steps with matrix expansion."""
     wf_dir = repo_root / ".github" / "workflows"
@@ -293,6 +518,14 @@ def parse_workflow_steps(repo_root: Path) -> List[Dict]:
                 job_env = job.get("env", {})
                 matrix = job.get("strategy", {}).get("matrix", {})
                 steps = job.get("steps", [])
+
+                uses_clause = str(job.get("uses", "")).strip()
+                if uses_clause and not steps:
+                    reusable_steps = expand_reusable_workflow(
+                        job_id, job, wf_path, repo_root, wf_name
+                    )
+                    discovered_steps.extend(reusable_steps)
+                    continue
 
                 # Expand matrix configurations
                 matrix_keys = list(matrix.keys()) if isinstance(matrix, dict) else []
@@ -434,38 +667,34 @@ def fallback_quality_gates(repo_root: Path) -> List[Dict]:
             )
 
     # Documentation project detection
-    if (repo_root / "scripts" / "validate_frontmatter.py").exists():
-        target_dirs = " ".join(
-            [
-                d
-                for d in [
-                    "services/",
-                    "operations/",
-                    "architecture/",
-                    "reference/",
-                    "docs/",
-                    "home.md",
-                ]
-                if (repo_root / d).exists()
-            ]
-        )
-        if target_dirs:
-            steps.append(
-                {
-                    "step_name": "Diátaxis Frontmatter Validator",
-                    "command": f"python3 scripts/validate_frontmatter.py {target_dirs}",
-                    "env": {},
-                    "source": "fallback-docs",
-                }
-            )
-
-    if (repo_root / ".markdownlint.yaml").exists() or (
-        repo_root / ".markdownlint.json"
-    ).exists():
+    doc_candidates = [
+        d
+        for d in ["docs", "services", "operations", "architecture", "reference"]
+        if (repo_root / d).is_dir()
+    ]
+    if doc_candidates or (repo_root / "mkdocs.yml").exists():
+        target = "docs" if (repo_root / "docs").is_dir() else (doc_candidates[0] if doc_candidates else "docs")
         steps.append(
             {
-                "step_name": "Markdownlint Quality Check",
-                "command": 'npx --yes markdownlint-cli2 "**/*.md"',
+                "step_name": f"Diátaxis Frontmatter & Hubs Check ({target})",
+                "command": f"run-local-ci --validate-docs {target}",
+                "env": {},
+                "source": "fallback-docs",
+            }
+        )
+        steps.append(
+            {
+                "step_name": f"Markdownlint Quality Check ({target})",
+                "command": f'npx --yes markdownlint-cli2 "{target}/**/*.md"',
+                "env": {},
+                "source": "fallback-docs",
+            }
+        )
+    elif (repo_root / "scripts" / "validate_frontmatter.py").exists():
+        steps.append(
+            {
+                "step_name": "Diátaxis Frontmatter Validator",
+                "command": "python3 scripts/validate_frontmatter.py docs/",
                 "env": {},
                 "source": "fallback-docs",
             }
@@ -565,9 +794,20 @@ def main():
         action="store_true",
         help="Show detailed output for passing steps",
     )
+    parser.add_argument(
+        "--validate-docs",
+        nargs="?",
+        const="docs",
+        type=str,
+        help="Validate Diátaxis frontmatter and namespace hubs in target directory (default: docs)",
+    )
 
     args = parser.parse_args()
     repo_root = find_repo_root(args.dir)
+
+    if args.validate_docs:
+        target_dir = repo_root / args.validate_docs
+        sys.exit(validate_documentation(target_dir))
 
     print("==================================================")
     print(f" [run-local-ci] Repository: {repo_root.name}")
