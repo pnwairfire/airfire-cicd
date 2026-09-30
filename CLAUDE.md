@@ -1,45 +1,73 @@
 # CLAUDE.md Guidelines for USFS AirFire CI/CD
 
-This repository contains Continuous Integration and Continuous Deployment (CI/CD) standards, documentation, central reusable GitHub Actions workflows (`@v1`), and consumer caller templates for the USFS AirFire research group.
-
-## Code Quality and Verification Commands
-While this is a template and style guide repository rather than a runtime application, agents and developers should verify workflow syntax and document formatting using the following tools:
-
-- **Lint and Validate GitHub Workflows**: Use [actionlint](https://github.com/rhysd/actionlint) to catch syntax errors or incorrect schema usage in `.github/workflows/` and `examples/`:
-  ```bash
-  actionlint .github/workflows/*.yml examples/*.yml
-  ```
-- **Format and Lint Markdown**: Use markdownlint to enforce formatting across the docs:
-  ```bash
-  markdownlint docs/ README.md examples/README.md
-  ```
-- **Verify Link Portability**: Ensure relative paths are used for all documentation references (enforced by the workspace `enforce-relative-paths` skill).
+This repository serves as the central Continuous Integration (CI) action hub and authoritative engineering policy repository for the USFS Pacific Northwest Research Station AirFire team.
 
 ---
 
-## Repository Style and Engineering Rules
+## 1. Code Quality & Verification Commands
 
-### 1. Branching and Workflows
-- **Target Branches**: Automated CI runs on pull requests targeting `main` (or `master` for legacy).
-- **Environment Triggers**:
-  - Pushes (merges) to `main` automatically deploy to the `dev` environment.
-  - Release tags matching `vM.m.r` (e.g., `v1.0.2`) deploy to the `prod` environment (requires manual approval gate).
-- **Commit Signing**: Developers must sign commits using GPG or SSH keys.
+Before staging any git commit, agents and developers must execute local verification commands:
 
-### 2. Environment Standards
-- **Two-Environment Policy**: Standardize strictly on `dev` and `prod`. Do not add staging/test environments without explicit requirement approval.
-- **Environment Scoping**: Scoped variables and environment secrets must be set up in GitHub settings for the `prod` environment to restrict access.
+- **Validate GitHub Actions Workflows**: Use [actionlint](https://github.com/rhysd/actionlint) to catch YAML syntax errors, schema violations, and unpinned actions:
+  ```bash
+  actionlint .github/workflows/*.yml examples/*.yml
+  ```
+- **Lint and Format Markdown**: Use markdownlint to enforce Diátaxis formatting and style standards:
+  ```bash
+  markdownlint docs/ README.md examples/README.md AGENTS.md CLAUDE.md
+  ```
+- **Mandatory Pre-Commit Quality Gate**: Run the repository verification script and confirm 100% check pass rate:
+  ```bash
+  run-local-ci
+  ```
+- **Link Portability**: Ensure all markdown links use relative file paths (`enforce-relative-paths`).
+- **No Emojis**: Prohibit emojis in documentation, policies, commit messages, and workflows (`professional-documentation`).
 
-### 3. Security Requirements
-- **Action Pinning**: Use major version tags (e.g., `@v4`) rather than commit SHAs to allow automatic patch updates.
-- **AWS Authentication**: Never store static AWS Access Keys in GitHub. Use AWS OpenID Connect (OIDC) federation.
-  - Ensure the workflow requests `id-token: write` and `contents: read` permissions.
-- **Application Secrets**: Use AWS Secrets Manager for runtime secrets with:
-  - Custom KMS keys (no default managed keys).
-  - Explicit least-privilege policies.
-  - Automatic rotation.
-  - CloudTrail auditing.
+---
 
-### 4. Deployment Footprints
-- **Legacy**: Standalone EC2 instances, Docker Compose, and Fabric SSH scripting.
-- **Modern**: AWS ECS, Fargate serverless containers, and ALB routing (no Fabric/SSH required).
+## 2. Repository Mission and Governance
+
+`airfire-cicd` provides:
+1. **Central Reusable Workflows (`.github/workflows/`)**: Callable workflows (`reusable-docs.yml`, `reusable-python.yml`, `reusable-node.yml`, `reusable-terraform.yml`) invoked by downstream repositories via `workflow_call`.
+2. **Consumer Caller Archetypes (`examples/`)**: Pre-configured caller templates for Python, Node.js, Terraform, and Polyglot repositories.
+3. **Diátaxis Documentation Suite (`docs/`)**: Comprehensive technical documentation organized into Explanation, How-To Guides, Reference, and Tutorials.
+
+### Releasing Workflow Updates (Maintainer Procedure)
+1. Commit workflow modifications to `main`.
+2. Tag an immutable SemVer point release (e.g. `v1.1.0`).
+3. Force-advance the floating major tag (`v1`) and push:
+   ```bash
+   git tag -fa v1 -m "Update v1 reusable workflows to v1.1.0"
+   git push origin v1 --force
+   ```
+
+---
+
+## 3. Organizational Engineering Standards
+
+When updating policies, examples, or documentation, agents must conform to group standards:
+
+### 1. Operational Reality
+- Small collaborative engineering team across USFS, DRI, and UW.
+- Monitoring alarms route to Slack `#fasm-alerts`; active triage and remediation occur in `#critical`.
+- Never fabricate corporate enterprise hierarchy, secondary on-call rotations, PagerDuty schedules, or artificial commercial SaaS response SLAs.
+
+### 2. Branching & Environments
+- Trunk-based development on `main`.
+- Standard environment tiers: `dev` (push to `main`), `staging` (pre-release validation), `prod` (versioned release tags `vM.m.r` with manual approval gates). Specialized domain tiers like `practice` permitted when justified.
+- Deployment jobs must declare concurrency locks (`cancel-in-progress: false`).
+
+### 3. Cloud Security & OIDC
+- Keyless AWS OIDC authentication (`audience: sts.amazonaws.com`). Never commit static access keys.
+- Store configuration metadata in GitHub Variables (`vars.AWS_ROLE_TO_ASSUME`, `vars.AWS_REGION`, etc.).
+- Store confidential tokens in GitHub Secrets (`secrets.*`).
+- Application runtime credentials reside in AWS Secrets Manager and are fetched dynamically via AWS CLI.
+
+### 4. Zero-Deploy-Key Documentation Plane
+- Contributing repositories author docs in `docs/` and run `reusable-docs.yml@v1`.
+- Contributing repositories never maintain SSH deploy keys to push to `pnwairfire/knowledge-base`.
+- The central knowledge base repository automatically pulls documentation registered in `catalog.yaml`.
+
+### 5. Ephemeral Planning Hygiene
+- Store transient plans, scratch outlines, and superpowers execution artifacts in `.superpowers/` or `.plans/`.
+- Ensure `.superpowers/` and `.plans/` are excluded in `.gitignore` and never committed to version control.
