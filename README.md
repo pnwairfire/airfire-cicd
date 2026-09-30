@@ -1,128 +1,123 @@
-# USFS AirFire CI/CD Style Guide and Examples
+# USFS AirFire Central CI/CD Action Hub
 
-This repository serves as a style guide and educational resource for introducing developers on the USFS AirFire team to Continuous Integration and Continuous Deployment (CI/CD) using GitHub Actions.
+This repository serves as the centralized Continuous Integration (CI) action hub and authoritative engineering policy library for the United States Forest Service (USFS) Pacific Northwest Research Station AirFire team.
 
-It provides centralized reusable workflows (`@v1`) and copy-and-paste consumer caller templates for Python, Node.js, Terraform, and polyglot repositories across the organization.
-
----
-
-## 1. Documentation Roadmap
-
-For detailed explanations of the group's standards, conventions, architectural layouts, and setup guides, refer to the following documentation:
-- [USFS AirFire CI/CD Style Guide](docs/cicd-style-guide.md): The core style guide detailing workflow logic, environment conventions, branching structures, OIDC configuration, and security rules.
-- [Repository Migration Runbook](docs/how-to/migrating-a-repo-to-standard-ci.md): Step-by-step checklist for migrating repositories to standard CI/CD and the centralized knowledge base.
-- [Reusable Workflows Reference](docs/reference/reusable-workflows-reference.md): Technical parameter specification for all central workflows.
-- [Configuring AWS OIDC Federation](docs/aws-oidc-setup.md): A step-by-step setup guide for creating the OIDC Identity Provider in AWS IAM and configuring restricted Trust Policies for GitHub Action roles.
-- [Configuring GitHub Environments](docs/github-environments-setup.md): A step-by-step setup guide for creating development and production environment gates in GitHub settings.
-- [GitHub Secrets Scoping and Management Guide](docs/github-secrets-management.md): Detailed instructions on declaring global repository secrets and scoping environment secrets to development and production targets.
+It publishes centralized reusable GitHub Actions workflows (`@v1`) and copy-and-paste consumer caller templates for Python, Node.js, Terraform, and Polyglot repositories across the organization.
 
 ---
 
-## 2. Consumer Caller Workflow Examples
+## 1. Central Reusable Workflows (`@v1`)
 
-To onboard a repository to AirFire CI/CD without writing bespoke pipelines from scratch, copy-and-paste caller templates are provided in the [`examples/`](examples/) directory:
+AirFire repositories standardize their pull request and merge quality gates by calling shared `workflow_call` templates published from this repository. Workflows are pinned under the floating major tag `@v1` to automatically receive non-breaking tool updates, security patches, and performance optimizations.
 
-| Archetype | Caller Template | Reusable Workflows Invoked | Focus & Key Gates |
-| :--- | :--- | :--- | :--- |
-| **Python** | [`consumer-python-ci.yml`](examples/consumer-python-ci.yml) | `reusable-docs.yml@v1`, `reusable-python.yml@v1` | Astral `uv` setup, Ruff lint/format checks, Pytest suite, Diátaxis frontmatter, and markdownlint. |
-| **NodeJS** | [`consumer-node-ci.yml`](examples/consumer-node-ci.yml) | `reusable-docs.yml@v1`, `reusable-node.yml@v1` | Node.js runtime caching, ESLint, Jest unit testing, bundle build verification, and markdownlint. |
-| **Terraform** | [`consumer-terraform-ci.yml`](examples/consumer-terraform-ci.yml) | `reusable-docs.yml@v1`, `reusable-terraform.yml@v1` | `terraform fmt`, `tflint` static analysis, `terraform validate`, and documentation checks. |
-| **Polyglot** | [`consumer-polyglot-ci.yml`](examples/consumer-polyglot-ci.yml) | `reusable-docs.yml@v1`, `reusable-python.yml@v1`, `reusable-node.yml@v1` | Multi-language quality gates scoped by subdirectories (`backend` and `frontend`). |
-
----
-
-## 3. Quick Reference: Branching and Triggers
-
-Workflows conform to the following AirFire branch and tag triggers:
-
-```
-                  [ Pull Request targeting main/master ]
-                                   │
-                                   ▼
-                      Runs Automated CI Checks
-               (Linting, Testing, Terraform Validation)
-                                   │
-                                   ▼
-                   [ Merge PR into main/master (Push) ]
-                                   │
-                                   ▼
-                      Deploys to 'dev' Environment
-                                   │
-                                   ▼
-                     [ Create Version Tag vM.m.r ]
-                                   │
-                                   ▼
-                     Deploys to 'prod' Environment
-              (Requires manual approval gate on GitHub)
-```
-
----
-
-## 4. Central Reusable Workflows (`@v1`)
-
-AirFire repositories standardize their pull request quality gates by calling shared `workflow_call` templates published from this repository. Workflows are tagged under floating major version `@v1` for automatic stability and non-breaking tool updates.
-
-### Available Reusable Workflows
-
-| Reusable Workflow | Focus & Quality Gates | Key Inputs & Defaults |
+| Workflow File | Focus & Key Quality Gates | Reference Documentation |
 | :--- | :--- | :--- |
-| **`reusable-docs.yml`** | Diátaxis frontmatter, namespace `README.md` hubs, markdownlint | `docs_path: "docs"`, `validate_frontmatter: true`, `run_markdownlint: true` |
-| **`reusable-python.yml`** | `uv` dependency sync, `ruff check`, `ruff format`, `pytest` | `python-version: "3.12"`, `run-ruff: true`, `run-tests: true`, `pytest-args: "-v"` |
-| **`reusable-node.yml`** | `npm`/`pnpm` cache, ESLint, unit testing, build check | `node-version: "20"`, `package-manager: "npm"`, `run-lint: true`, `run-test: true`, `run-build: true` |
-| **`reusable-terraform.yml`** | `terraform fmt`, `tflint`, `terraform validate` | `terraform-version: "1.9.0"`, `run-fmt: true`, `run-validate: true`, `run-tflint: true` |
+| **`reusable-docs.yml`** | Diátaxis frontmatter validation, Wiki.js namespace hubs, markdownlint | [docs reference](docs/reference/reusable-workflows-reference.md#1-reusable-docsyml) |
+| **`reusable-python.yml`** | Astral `uv` dependency caching, `ruff check`, `ruff format`, `pytest` | [python reference](docs/reference/reusable-workflows-reference.md#2-reusable-pythonyml) |
+| **`reusable-node.yml`** | Node.js 20/22 runtime caching (`npm`/`pnpm`), ESLint, tests, build checks | [node reference](docs/reference/reusable-workflows-reference.md#3-reusable-nodeyml) |
+| **`reusable-terraform.yml`** | `terraform fmt -check`, `tflint` static analysis, `terraform validate` | [terraform reference](docs/reference/reusable-workflows-reference.md#4-reusable-terraformyml) |
 
-### Consumer Repository Example
+---
 
-In contributing repositories, create `.github/workflows/ci.yml`:
+## 2. Consumer Caller Archetypes
+
+To onboard a repository without writing bespoke CI scripts from scratch, copy-and-paste caller templates are maintained in [`examples/`](examples/):
+
+| Archetype | Caller Template | Called Workflows | Target Use Cases |
+| :--- | :--- | :--- | :--- |
+| **Python** | [`consumer-python-ci.yml`](examples/consumer-python-ci.yml) | `reusable-docs`, `reusable-python` | Python CLI tools, ETL pipelines, and Prefect flow repositories. |
+| **Node.js** | [`consumer-node-ci.yml`](examples/consumer-node-ci.yml) | `reusable-docs`, `reusable-node` | Svelte SPAs, web maps (`fasm-v4`), and TypeScript libraries. |
+| **Terraform** | [`consumer-terraform-ci.yml`](examples/consumer-terraform-ci.yml) | `reusable-docs`, `reusable-terraform` | Cloud infrastructure and Terraform module repositories. |
+| **Polyglot** | [`consumer-polyglot-ci.yml`](examples/consumer-polyglot-ci.yml) | `reusable-docs`, `reusable-python`, `reusable-node` | Full-stack monorepos managing both backend APIs and web interfaces. |
+
+For detailed mapping instructions, consult the [Consumer Caller Archetypes Catalog](docs/reference/consumer-archetypes-catalog.md).
+
+---
+
+## 3. Quick-Start Example
+
+In your repository, create `.github/workflows/ci.yml`:
 
 ```yaml
-name: Continuous Integration
+name: Continuous Integration & Quality Gates
 
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  docs-quality-gates:
-    name: Documentation
+  docs-ci:
+    name: Documentation Quality Gates
     uses: pnwairfire/airfire-cicd/.github/workflows/reusable-docs.yml@v1
     with:
       docs_path: "docs"
 
   python-ci:
-    name: Python Pipeline
+    name: Python Quality Gates
     uses: pnwairfire/airfire-cicd/.github/workflows/reusable-python.yml@v1
     with:
       python-version: "3.12"
+      run-ruff: true
+      run-tests: true
 ```
 
-### Versioning & Moving Floating Tags
+Before committing, verify all quality gates pass locally:
+```bash
+run-local-ci
+```
 
-AirFire reusable workflows use standard Git tags for versioning. To provide consumer repositories with automatic stability and non-breaking bug fixes, we maintain **floating major version tags** (such as `v1`):
+---
 
-* **Consumer Repositories**: Pin to the major version tag (e.g. `@v1`).
-* **Maintenance Workflow**: When updating, fixing, or improving reusable workflows in this repository:
+## 4. Documentation Suite (Diátaxis Framework)
 
-1. **Commit changes to `main`**:
+Complete technical documentation is maintained under [`docs/`](docs/) according to the **Diátaxis Documentation Framework**:
+
+### Explanation (Understanding)
+- **[USFS AirFire CI/CD Style Guide](docs/cicd-style-guide.md)**: The authoritative engineering policy, operational team realities, environment tiers, and security conventions.
+- **[Central Reusable Hub Architecture](docs/explanation/hub-and-spoke-architecture.md)**: Rationale for centralized reusable workflows and floating major tag governance.
+- **[Decoupled Documentation Plane](docs/explanation/decoupled-documentation-plane.md)**: Zero-deploy-key architecture for aggregating documentation into `pnwairfire/knowledge-base`.
+
+### How-To Guides (Problem-Solving)
+- **[How to Migrate a Repository to Standard CI](docs/how-to/migrating-a-repo-to-standard-ci.md)**: 4-step checklist to onboard any repository to `@v1`.
+- **[How to Configure AWS OIDC Federation](docs/how-to/configuring-aws-oidc.md)**: Setting up keyless AWS IAM OpenID Connect authentication.
+- **[How to Configure GitHub Environments](docs/how-to/configuring-github-environments.md)**: Setting up `dev`, `staging`, `prod` gates and concurrency locks.
+- **[How to Manage Secrets and Variables](docs/how-to/managing-secrets-and-variables.md)**: Separating `vars.*` from `secrets.*` and dynamic AWS Secrets Manager access.
+- **[How to Release Workflow Updates](docs/how-to/releasing-workflow-updates.md)**: Maintainer instructions for publishing point releases and advancing `@v1`.
+
+### Reference (Information)
+- **[Reusable Workflows Reference Specification](docs/reference/reusable-workflows-reference.md)**: Inputs, defaults, and outputs for all central workflows.
+- **[Consumer Caller Archetypes Catalog](docs/reference/consumer-archetypes-catalog.md)**: Mapping project directory layouts to caller templates.
+- **[AWS IAM OIDC Trust Policy Specification](docs/reference/iam-trust-policy-spec.md)**: JSON trust policies for development and production roles.
+
+### Tutorials (Learning)
+- **[Tutorial: Onboarding Your First Repository](docs/tutorials/onboarding-your-first-repository.md)**: Step-by-step beginner tutorial for setting up CI from scratch.
+
+For a full navigation index, see the [AirFire CI/CD Documentation Hub](docs/README.md).
+
+---
+
+## 5. Floating Tag Governance (Maintainers)
+
+When publishing updates to reusable workflows:
+
+1. Commit changes to `main`:
    ```bash
-   git add .
-   git commit -m "feat(python): add ruff format check to reusable-python.yml"
+   git add .github/workflows/reusable-*.yml
+   git commit -m "feat(python): upgrade ruff checks and enable ty type checking"
    git push origin main
    ```
-
-2. **Tag an immutable SemVer point release (recommended)**:
+2. Tag an immutable SemVer point release:
    ```bash
    git tag -a v1.1.0 -m "Release v1.1.0"
    git push origin v1.1.0
    ```
-
-3. **Advance the floating major tag (`v1`)**:
-   Use `-f` (force) to move the `v1` tag pointer to the latest commit:
+3. Force-advance the floating major tag (`v1`):
    ```bash
    git tag -fa v1 -m "Update v1 reusable workflows to v1.1.0"
    git push origin v1 --force
    ```
 
-All consumer repositories referencing `@v1` will automatically inherit the update on their next workflow execution without requiring any code changes.
+All downstream repositories referencing `@v1` automatically inherit the update.
