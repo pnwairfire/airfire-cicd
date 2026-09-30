@@ -7,9 +7,9 @@ on:
         description: "Terraform version to install"
         required: false
         type: string
-        default: "1.9.0"
+        default: "1.14.0"
       working-directory:
-        description: "Working directory for Terraform configs"
+        description: "Root working directory for Terraform discovery"
         required: false
         type: string
         default: "."
@@ -19,7 +19,7 @@ on:
         type: boolean
         default: true
       run-validate:
-        description: "Run terraform validate"
+        description: "Run multi-module terraform discovery and validation"
         required: false
         type: boolean
         default: true
@@ -60,16 +60,44 @@ jobs:
         run: |
           terraform fmt -check -recursive .
 
-      - name: Terraform Validate
-        if: ${{ inputs.run-validate }}
-        shell: bash
-        run: |
-          terraform init -backend=false
-          terraform validate
-
       - name: TFLint Check
         if: ${{ inputs.run-tflint }}
         shell: bash
         run: |
           tflint --init
           tflint --recursive
+
+      - name: Terraform Multi-Module Discovery & Validation
+        if: ${{ inputs.run-validate }}
+        shell: bash
+        run: |
+          echo "==> Discovering Terraform modules under $(pwd)..."
+          TF_DIRS=$(find . -type f -name "*.tf" -not -path "*/.*/*" -exec dirname {} + | sort -u)
+          if [ -z "$TF_DIRS" ]; then
+            echo "No Terraform configurations found."
+            exit 0
+          fi
+
+          echo "Discovered Terraform directories:"
+          echo "$TF_DIRS"
+
+          FAILED=0
+          for dir in $TF_DIRS; do
+            echo "--------------------------------------------------"
+            echo "==> Validating module: $dir"
+            echo "--------------------------------------------------"
+            (
+              cd "$dir"
+              terraform init -backend=false -input=false || exit 1
+              terraform validate || exit 1
+            ) || {
+              echo "❌ Validation failed for module: $dir"
+              FAILED=1
+            }
+          done
+
+          if [ $FAILED -ne 0 ]; then
+            echo "❌ One or more Terraform modules failed validation."
+            exit 1
+          fi
+          echo "✅ All discovered Terraform modules validated successfully."

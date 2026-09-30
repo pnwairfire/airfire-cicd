@@ -462,8 +462,8 @@ def expand_reusable_workflow(
 
     # 3. reusable-terraform.yml
     if "reusable-terraform.yml" in uses:
-        tf_dir = str(with_inputs.get("terraform_directory", "."))
-        check_fmt = with_inputs.get("check_formatting", True)
+        tf_dir = str(with_inputs.get("working-directory", with_inputs.get("terraform_directory", ".")))
+        check_fmt = with_inputs.get("run-fmt", with_inputs.get("check_formatting", True))
         if str(check_fmt).lower() not in ("false", "0", "no"):
             steps.append(
                 {
@@ -475,6 +475,47 @@ def expand_reusable_workflow(
                     "env": {},
                 }
             )
+
+        run_tflint = with_inputs.get("run-tflint", True)
+        if str(run_tflint).lower() not in ("false", "0", "no"):
+            chdir_flag = f"--chdir={tf_dir}" if tf_dir != "." else ""
+            steps.append(
+                {
+                    "workflow_file": wf_path.name,
+                    "workflow_name": wf_name,
+                    "job_id": job_id,
+                    "step_name": f"TFLint Check ({tf_dir})",
+                    "command": f"tflint --init {chdir_flag} && tflint --recursive {chdir_flag}".strip(),
+                    "env": {},
+                }
+            )
+
+        run_validate = with_inputs.get("run-validate", True)
+        if str(run_validate).lower() not in ("false", "0", "no"):
+            search_root = (repo_root / tf_dir).resolve() if tf_dir != "." else repo_root
+            if search_root.exists():
+                tf_dirs = set()
+                for tf_file in search_root.rglob("*.tf"):
+                    parts = tf_file.relative_to(search_root).parts
+                    if any(part.startswith(".") for part in parts):
+                        continue
+                    tf_dirs.add(tf_file.parent)
+
+                for mod_dir in sorted(tf_dirs):
+                    try:
+                        rel_dir = mod_dir.relative_to(repo_root)
+                    except ValueError:
+                        rel_dir = mod_dir
+                    steps.append(
+                        {
+                            "workflow_file": wf_path.name,
+                            "workflow_name": wf_name,
+                            "job_id": job_id,
+                            "step_name": f"Terraform Validate ({rel_dir})",
+                            "command": f"terraform -chdir={rel_dir} init -backend=false && terraform -chdir={rel_dir} validate",
+                            "env": {},
+                        }
+                    )
         return steps
 
     # 4. reusable-node.yml
