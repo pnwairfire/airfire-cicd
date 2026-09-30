@@ -58,6 +58,8 @@ def run_command(
     if local_bin not in env.get("PATH", ""):
         env["PATH"] = f"{local_bin}:{env.get('PATH', '')}"
 
+    env.setdefault("CI", "true")
+
     if env_vars:
         env.update(env_vars)
 
