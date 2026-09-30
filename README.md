@@ -76,7 +76,12 @@ run-local-ci
 To verify repository quality gates before pushing to GitHub (catching issues locally instead of triggering failures on Actions runners and alerts in `#fasm-alerts`), install the `run-local-ci` workstation utility:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
+# Using GitHub CLI (private repository authenticated)
+gh api repos/pnwairfire/airfire-cicd/contents/scripts/run-local-ci?ref=v1 -H "Accept: application/vnd.github.raw" > ~/.local/bin/run-local-ci
+chmod +x ~/.local/bin/run-local-ci
+
+# Alternatively using curl with GitHub token
+curl -fsSL -H "Authorization: token $(gh auth token)" https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
 chmod +x ~/.local/bin/run-local-ci
 ```
 

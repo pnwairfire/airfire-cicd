@@ -31,8 +31,17 @@ Running quality checks locally eliminates broken build notifications in team Sla
 
 Download the executable script directly from the floating `@v1` release into your user binary directory:
 
+Because `airfire-cicd` is an internal private repository, authenticate using the GitHub CLI (`gh`) or an authorized token:
+
+Using the GitHub CLI (recommended):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
+gh api repos/pnwairfire/airfire-cicd/contents/scripts/run-local-ci?ref=v1 -H "Accept: application/vnd.github.raw" > ~/.local/bin/run-local-ci
+chmod +x ~/.local/bin/run-local-ci
+```
+
+Or using `curl` with your GitHub token:
+```bash
+curl -fsSL -H "Authorization: token $(gh auth token)" https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
 chmod +x ~/.local/bin/run-local-ci
 ```
 
@@ -143,8 +152,17 @@ run-local-ci --act
 
 To update to the latest stable point release on the `@v1` stream, re-run the installation command:
 
+Because `airfire-cicd` is an internal private repository, authenticate using the GitHub CLI (`gh`) or an authorized token:
+
+Using the GitHub CLI (recommended):
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
+gh api repos/pnwairfire/airfire-cicd/contents/scripts/run-local-ci?ref=v1 -H "Accept: application/vnd.github.raw" > ~/.local/bin/run-local-ci
+chmod +x ~/.local/bin/run-local-ci
+```
+
+Or using `curl` with your GitHub token:
+```bash
+curl -fsSL -H "Authorization: token $(gh auth token)" https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
 chmod +x ~/.local/bin/run-local-ci
 ```
 
