@@ -71,7 +71,30 @@ run-local-ci
 
 ---
 
-## 4. Documentation Suite (Diátaxis Framework)
+## 4. Local Verification Utility (`run-local-ci`)
+
+To verify repository quality gates before pushing to GitHub (catching issues locally instead of triggering failures on Actions runners and alerts in `#fasm-alerts`), install the `run-local-ci` workstation utility:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
+chmod +x ~/.local/bin/run-local-ci
+```
+
+From any repository root, run:
+
+```bash
+# Execute local quality checks
+run-local-ci
+
+# Auto-fix formatting and linting errors
+run-local-ci --fix
+```
+
+For full options and configuration details, see [How to Install and Use run-local-ci](docs/how-to/installing-and-using-run-local-ci.md).
+
+---
+
+## 5. Documentation Suite (Diátaxis Framework)
 
 Complete technical documentation is maintained under [`docs/`](docs/) according to the **Diátaxis Documentation Framework**:
 
@@ -85,6 +108,7 @@ Complete technical documentation is maintained under [`docs/`](docs/) according 
 - **[How to Configure AWS OIDC Federation](docs/how-to/configuring-aws-oidc.md)**: Setting up keyless AWS IAM OpenID Connect authentication.
 - **[How to Configure GitHub Environments](docs/how-to/configuring-github-environments.md)**: Setting up `dev`, `staging`, `prod` gates and concurrency locks.
 - **[How to Manage Secrets and Variables](docs/how-to/managing-secrets-and-variables.md)**: Separating `vars.*` from `secrets.*` and dynamic AWS Secrets Manager access.
+- **[How to Install and Use run-local-ci](docs/how-to/installing-and-using-run-local-ci.md)**: Installing, updating, and running local quality gate verifications.
 - **[How to Release Workflow Updates](docs/how-to/releasing-workflow-updates.md)**: Maintainer instructions for publishing point releases and advancing `@v1`.
 
 ### Reference (Information)
@@ -99,7 +123,7 @@ For a full navigation index, see the [AirFire CI/CD Documentation Hub](docs/READ
 
 ---
 
-## 5. Floating Tag Governance (Maintainers)
+## 6. Floating Tag Governance (Maintainers)
 
 When publishing updates to reusable workflows:
 

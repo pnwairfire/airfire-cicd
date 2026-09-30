@@ -49,6 +49,7 @@ Step-by-step recipes designed to solve specific operational problems and workflo
 * **[How to Configure AWS OIDC Federation](how-to/configuring-aws-oidc.md)**: Recipe for configuring AWS IAM Identity Providers and restricted web identity trust policies.
 * **[How to Configure GitHub Environments](how-to/configuring-github-environments.md)**: Recipe for setting up development, staging, and production environment gates and deployment concurrency locks.
 * **[How to Manage Secrets and Variables](how-to/managing-secrets-and-variables.md)**: Best practices for storing configuration in GitHub Variables (`vars.*`), confidential tokens in Secrets (`secrets.*`), and pulling runtime credentials dynamically from AWS Secrets Manager.
+* **[How to Install and Use run-local-ci](how-to/installing-and-using-run-local-ci.md)**: Recipe for installing, updating, and running local CI quality gate verifications.
 * **[How to Release Workflow Updates](how-to/releasing-workflow-updates.md)**: Maintainer instructions for testing, tagging immutable point releases (`v1.x.y`), and advancing the floating major tag (`v1`).
 
 ---

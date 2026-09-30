@@ -23,7 +23,12 @@ By the end of this lesson, your repository will automatically validate code form
 
 - A local clone of an AirFire repository (Python, Node.js, Terraform, or Polyglot).
 - Git installed and configured.
-- The `run-local-ci` utility installed on your workstation.
+- The `run-local-ci` utility installed on your workstation:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/pnwairfire/airfire-cicd/v1/scripts/run-local-ci -o ~/.local/bin/run-local-ci
+  chmod +x ~/.local/bin/run-local-ci
+  ```
+  *(See [How to Install and Use run-local-ci](../how-to/installing-and-using-run-local-ci.md) for full guide and CLI options)*.
 
 ---
 

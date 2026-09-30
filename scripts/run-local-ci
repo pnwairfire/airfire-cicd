@@ -1,0 +1,713 @@
+#!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyyaml>=6.0",
+# ]
+# ///
+"""
+run_local_ci.py - Run GitHub Actions CI quality gates and local pre-push checks locally.
+
+Conforms to Modern Python standards (using uv, ruff, ty, and PEP 723).
+- Auto-detects git repository root.
+- Discovers CI checks from repository pre-push hooks (scripts/git-hooks/pre-push) or .github/workflows/*.yml.
+- Automatically skips runner provisioning steps (e.g. pip install, setup-python) and executes quality checks.
+- Uses `uv run` to execute Python tooling (ruff, pytest, ty, python scripts) safely and hermetically.
+- Automatically expands GitHub Actions matrix strategies (e.g. matrix.module, matrix.env).
+- Supports auto-fixing formatting/linting issues with --fix.
+- Supports containerized workflow execution with gh act via --act.
+- Returns exit code 0 if all quality gates pass, exit code 1 if any gate fails.
+"""
+
+import argparse
+import itertools
+import os
+import re
+import shlex
+import subprocess
+import sys
+import time
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
+VERSION = "1.2.0"
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+
+def find_repo_root(start_dir: Path) -> Path:
+    """Find git repository root or fallback to start_dir."""
+    current = start_dir.resolve()
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    return start_dir.resolve()
+
+
+def run_command(
+    cmd: str, cwd: Path, env_vars: Optional[Dict[str, str]] = None, capture: bool = True
+) -> Tuple[int, str, str]:
+    """Execute a shell command in cwd with optional extra env vars."""
+    env = os.environ.copy()
+    # Ensure ~/.local/bin is in PATH so python, uv, and local tools are available
+    local_bin = str(Path.home() / ".local" / "bin")
+    if local_bin not in env.get("PATH", ""):
+        env["PATH"] = f"{local_bin}:{env.get('PATH', '')}"
+
+    if env_vars:
+        env.update(env_vars)
+
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(cwd),
+        shell=True,
+        stdout=subprocess.PIPE if capture else None,
+        stderr=subprocess.PIPE if capture else None,
+        text=True,
+        env=env,
+        executable="/bin/bash",
+    )
+    stdout, stderr = process.communicate()
+    return process.returncode, stdout or "", stderr or ""
+
+
+def find_hook_script(repo_root: Path) -> Optional[Path]:
+    """Check for dedicated local pre-push / CI script."""
+    candidates = [
+        repo_root / "scripts" / "git-hooks" / "pre-push",
+        repo_root / ".git" / "hooks" / "pre-push",
+        repo_root / "scripts" / "run_ci.sh",
+        repo_root / "scripts" / "pre-push",
+    ]
+    for c in candidates:
+        if c.is_file() and os.access(c, os.X_OK):
+            return c
+        elif c.is_file():
+            return c
+    return None
+
+
+def run_autofix(repo_root: Path, verbose: bool = False) -> None:
+    """Run common automated code formatters and fixers across detected tools."""
+    print("--------------------------------------------------")
+    print(
+        " [run-local-ci] Running automatic fixes (uv / ruff / markdownlint / terraform)..."
+    )
+    print("--------------------------------------------------")
+
+    # 1. Python ruff fix & format (modern python standards)
+    if (
+        (repo_root / "pyproject.toml").exists()
+        or (repo_root / "ruff.toml").exists()
+        or any(repo_root.glob("**/*.py"))
+    ):
+        print("--> Auto-formatting Python with uv run ruff...")
+        run_command("uv run ruff check --fix .", repo_root)
+        run_command("uv run ruff format .", repo_root)
+
+    # 2. Markdown formatting
+    if any(repo_root.glob("**/*.md")):
+        print("--> Auto-formatting Markdown with markdownlint-cli2 --fix...")
+        run_command('npx --yes markdownlint-cli2 --fix "**/*.md"', repo_root)
+
+    # 3. Terraform formatting
+    if any(repo_root.glob("**/*.tf")):
+        print("--> Auto-formatting Terraform code...")
+        run_command("terraform fmt -recursive .", repo_root)
+
+    print("✅ Auto-fix complete. Proceeding to verification.\n")
+
+
+def get_workflow_triggers(wf_data: dict) -> List[str]:
+    """Extract workflow trigger events handling PyYAML gotchas (e.g. 'on' parsed as True)."""
+    t = wf_data.get("on")
+    if t is None:
+        t = wf_data.get(True, {})
+    if isinstance(t, str):
+        return [t]
+    elif isinstance(t, list):
+        return t
+    elif isinstance(t, dict):
+        return list(t.keys())
+    return []
+
+
+def is_ci_validation_workflow(wf_name: str, wf_file: str, wf_data: dict) -> bool:
+    """Check if workflow is a CI quality gate triggered on PR or push."""
+    # Skip deployment, publishing, or cross-repo sync workflows
+    file_lower = wf_file.lower()
+    if any(
+        x in file_lower
+        for x in ["sync-docs", "sync_docs", "deploy", "release", "publish", "cd.yml"]
+    ):
+        return False
+
+    triggers = get_workflow_triggers(wf_data)
+    # Must trigger on pull_request or push to be a pre-commit quality gate
+    return any(t in ["pull_request", "push"] for t in triggers)
+
+
+def is_ci_validation_job(job_id: str, job: dict, wf_data: dict) -> bool:
+    """Determine whether a workflow job is a CI test/lint/validation quality gate."""
+    job_lower = job_id.lower()
+    wf_name_lower = str(wf_data.get("name", "")).lower()
+
+    # Skip cloud deploy, publish, apply, or destructive actions
+    skip_keywords = [
+        "deploy",
+        "release",
+        "publish",
+        "docker-build",
+        "docker_build",
+        "apply",
+        "terraform-apply",
+        "plan",
+        "terraform-plan",
+    ]
+    if any(x in job_lower for x in skip_keywords):
+        return False
+
+    steps = job.get("steps", [])
+    for s in steps:
+        if isinstance(s, dict) and "uses" in s:
+            if "configure-aws-credentials" in s["uses"] and "plan" in job_lower:
+                return False
+
+    include_keywords = [
+        "lint",
+        "test",
+        "check",
+        "validate",
+        "format",
+        "fmt",
+        "ci",
+        "quality",
+        "frontmatter",
+        "markdownlint",
+    ]
+    if any(x in job_lower for x in include_keywords) or any(
+        x in wf_name_lower for x in include_keywords
+    ):
+        return True
+
+    triggers = get_workflow_triggers(wf_data)
+    return any(t in ["pull_request", "push"] for t in triggers)
+
+
+def is_runner_provisioning_step(step_name: str, cmd: str) -> bool:
+    """Check if step is purely an environment provisioning step (e.g. pip install) to skip locally."""
+    lines = [
+        line.strip()
+        for line in cmd.strip().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if not lines:
+        return True
+
+    setup_prefixes = (
+        "pip install",
+        "pip3 install",
+        "python -m pip",
+        "python3 -m pip",
+        "npm install",
+        "npm ci",
+        "yarn install",
+        "pnpm install",
+        "uv python install",
+    )
+    # Pure install command block
+    if all(any(line.startswith(p) for p in setup_prefixes) for line in lines):
+        return True
+
+    # Step name explicitly indicates installing packages
+    if re.search(
+        r"\b(install dependencies|setup python|install pyyaml|install packages)\b",
+        step_name,
+        re.IGNORECASE,
+    ):
+        if any("pip install" in line or "npm install" in line for line in lines):
+            return True
+
+    # Echo-only status notification steps
+    if all(line.startswith("echo ") for line in lines):
+        return True
+
+    return False
+
+
+def modernize_command(cmd: str) -> str:
+    """Adapt commands to use modern Python tooling (uv run) when appropriate."""
+    lines = cmd.splitlines()
+    modern_lines = []
+    for line in lines:
+        stripped = line.strip()
+        indent = line[: len(line) - len(stripped)]
+        # Use uv run for ruff, pytest, ty
+        if stripped.startswith("ruff "):
+            modern_lines.append(f"{indent}uv run {stripped}")
+        elif stripped.startswith("pytest "):
+            modern_lines.append(f"{indent}uv run {stripped}")
+        elif stripped.startswith("ty "):
+            modern_lines.append(f"{indent}uv run {stripped}")
+        elif stripped.startswith("python ") or stripped.startswith("python3 "):
+            # Wrap with uv run for modern virtual environment execution
+            modern_lines.append(f"{indent}uv run {stripped}")
+        else:
+            modern_lines.append(line)
+    return "\n".join(modern_lines)
+
+
+def parse_workflow_steps(repo_root: Path) -> List[Dict]:
+    """Parse .github/workflows/*.yml and extract test/lint/validation steps with matrix expansion."""
+    wf_dir = repo_root / ".github" / "workflows"
+    if not wf_dir.exists() or yaml is None:
+        return []
+
+    discovered_steps = []
+    workflow_files = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
+
+    for wf_path in workflow_files:
+        try:
+            with open(wf_path, "r", encoding="utf-8") as f:
+                wf_data = yaml.safe_load(f)
+            if not isinstance(wf_data, dict):
+                continue
+
+            wf_name = wf_data.get("name", wf_path.name)
+            if not is_ci_validation_workflow(wf_name, wf_path.name, wf_data):
+                continue
+
+            jobs = wf_data.get("jobs", {})
+
+            for job_id, job in jobs.items():
+                if not isinstance(job, dict):
+                    continue
+
+                if not is_ci_validation_job(job_id, job, wf_data):
+                    continue
+
+                job_env = job.get("env", {})
+                matrix = job.get("strategy", {}).get("matrix", {})
+                steps = job.get("steps", [])
+
+                # Expand matrix configurations
+                matrix_keys = list(matrix.keys()) if isinstance(matrix, dict) else []
+                combinations = [{}]
+                if matrix_keys:
+                    keys = matrix_keys
+                    vals = [
+                        matrix[k] if isinstance(matrix[k], list) else [matrix[k]]
+                        for k in keys
+                    ]
+                    combinations = [
+                        dict(zip(keys, prod)) for prod in itertools.product(*vals)
+                    ]
+
+                for combo in combinations:
+                    combo_desc = (
+                        f" [{', '.join(f'{k}={v}' for k, v in combo.items())}]"
+                        if combo
+                        else ""
+                    )
+
+                    for step_idx, step in enumerate(steps):
+                        if not isinstance(step, dict) or "run" not in step:
+                            continue
+
+                        step_name = (
+                            step.get("name", f"{job_id} step {step_idx + 1}")
+                            + combo_desc
+                        )
+                        raw_run = step["run"].strip()
+
+                        # Skip environment provisioning steps
+                        if is_runner_provisioning_step(step_name, raw_run):
+                            continue
+
+                        # Clean or sanitize GitHub Expressions and Matrix Variables
+                        cleaned_run = raw_run
+                        for k, v in combo.items():
+                            cleaned_run = re.sub(
+                                r"\$\{\{\s*matrix\." + k + r"\s*\}\}",
+                                str(v),
+                                cleaned_run,
+                            )
+
+                        cleaned_run = re.sub(
+                            r"\$\{\{\s*github\.workspace\s*\}\}", ".", cleaned_run
+                        )
+                        cleaned_run = re.sub(
+                            r"\$\{\{\s*github\.head_ref\s*\|\|\s*'([^']+)'\s*\}\}",
+                            r"\1",
+                            cleaned_run,
+                        )
+                        cleaned_run = re.sub(
+                            r"\$\{\{\s*inputs\.\w+\s*\|\|\s*'([^']+)'\s*\}\}",
+                            r"\1",
+                            cleaned_run,
+                        )
+
+                        # Skip git clone, actions checkout, or echo sha steps
+                        if any(
+                            x in cleaned_run
+                            for x in [
+                                "actions/checkout",
+                                "git clone",
+                                "git config user.name",
+                                'echo "sha_short=',
+                            ]
+                        ):
+                            continue
+
+                        # Apply Modern Python tooling wrapping (uv run)
+                        modern_cmd = modernize_command(cleaned_run)
+
+                        step_env = {}
+                        if isinstance(job_env, dict):
+                            step_env.update(
+                                {
+                                    k: str(v)
+                                    for k, v in job_env.items()
+                                    if not str(v).startswith("${{")
+                                }
+                            )
+                        if isinstance(step.get("env"), dict):
+                            step_env.update(
+                                {
+                                    k: str(v)
+                                    for k, v in step["env"].items()
+                                    if not str(v).startswith("${{")
+                                }
+                            )
+
+                        discovered_steps.append(
+                            {
+                                "workflow_file": wf_path.name,
+                                "workflow_name": wf_name,
+                                "job_id": job_id,
+                                "step_name": step_name,
+                                "command": modern_cmd,
+                                "env": step_env,
+                            }
+                        )
+
+        except Exception:
+            continue
+
+    return discovered_steps
+
+
+def fallback_quality_gates(repo_root: Path) -> List[Dict]:
+    """Generate quality gate steps based on modern Python and project standards if no workflows found."""
+    steps = []
+
+    # Modern Python project detection
+    if (repo_root / "pyproject.toml").exists():
+        steps.append(
+            {
+                "step_name": "Ruff Lint Check",
+                "command": "uv run ruff check .",
+                "env": {},
+                "source": "fallback-python",
+            }
+        )
+        steps.append(
+            {
+                "step_name": "Ruff Format Check",
+                "command": "uv run ruff format --check .",
+                "env": {},
+                "source": "fallback-python",
+            }
+        )
+        if (repo_root / "tests").exists():
+            steps.append(
+                {
+                    "step_name": "Pytest Suite",
+                    "command": "uv run pytest tests/ -v",
+                    "env": {},
+                    "source": "fallback-python",
+                }
+            )
+
+    # Documentation project detection
+    if (repo_root / "scripts" / "validate_frontmatter.py").exists():
+        target_dirs = " ".join(
+            [
+                d
+                for d in [
+                    "services/",
+                    "operations/",
+                    "architecture/",
+                    "reference/",
+                    "docs/",
+                    "home.md",
+                ]
+                if (repo_root / d).exists()
+            ]
+        )
+        if target_dirs:
+            steps.append(
+                {
+                    "step_name": "Diátaxis Frontmatter Validator",
+                    "command": f"python3 scripts/validate_frontmatter.py {target_dirs}",
+                    "env": {},
+                    "source": "fallback-docs",
+                }
+            )
+
+    if (repo_root / ".markdownlint.yaml").exists() or (
+        repo_root / ".markdownlint.json"
+    ).exists():
+        steps.append(
+            {
+                "step_name": "Markdownlint Quality Check",
+                "command": 'npx --yes markdownlint-cli2 "**/*.md"',
+                "env": {},
+                "source": "fallback-docs",
+            }
+        )
+
+    # Terraform project detection
+    if any(repo_root.glob("**/*.tf")):
+        steps.append(
+            {
+                "step_name": "Terraform Format Check",
+                "command": "terraform fmt -check -recursive .",
+                "env": {},
+                "source": "fallback-terraform",
+            }
+        )
+
+    return steps
+
+
+def run_gh_act(
+    repo_root: Path, workflow: Optional[str] = None, job: Optional[str] = None
+) -> int:
+    """Run GitHub Actions workflow via gh act."""
+    print("==================================================")
+    print(" [run-local-ci] Launching Containerized CI via gh act...")
+    print("==================================================")
+
+    act_config_dir = Path.home() / ".config" / "act"
+    act_config_file = act_config_dir / "actrc"
+    if not act_config_file.exists():
+        act_config_dir.mkdir(parents=True, exist_ok=True)
+        with open(act_config_file, "w", encoding="utf-8") as f:
+            f.write("-P ubuntu-latest=catthehacker/ubuntu:act-latest\n")
+            f.write("-P ubuntu-22.04=catthehacker/ubuntu:act-22.04\n")
+
+    cmd = ["gh", "act"]
+    if workflow:
+        cmd.extend(["-W", f".github/workflows/{workflow}"])
+    if job:
+        cmd.extend(["-j", job])
+    else:
+        cmd.append("pull_request")
+
+    print(f"Running command: {' '.join(cmd)} in {repo_root}")
+    return subprocess.call(cmd, cwd=str(repo_root))
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run local CI quality gates and GitHub Actions workflows preemptively with Modern Python (uv) support."
+    )
+    parser.add_argument(
+        "-C",
+        "--dir",
+        type=Path,
+        default=Path.cwd(),
+        help="Target repository or directory (default: current working directory)",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Automatically format code and fix lint issues before running verification",
+    )
+    parser.add_argument(
+        "--act",
+        action="store_true",
+        help="Run workflows inside Docker container using gh act",
+    )
+    parser.add_argument(
+        "--workflow",
+        type=str,
+        default=None,
+        help="Specific workflow filename to execute (e.g. python-ci.yml, ci.yml)",
+    )
+    parser.add_argument(
+        "--job", type=str, default=None, help="Specific job ID to execute"
+    )
+    parser.add_argument(
+        "--hook",
+        action="store_true",
+        help="Force execution of the repository pre-push hook script",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List all discovered workflows, jobs, and checks without executing",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {VERSION}",
+        help="Show program version and exit",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show detailed output for passing steps",
+    )
+
+    args = parser.parse_args()
+    repo_root = find_repo_root(args.dir)
+
+    print("==================================================")
+    print(f" [run-local-ci] Repository: {repo_root.name}")
+    print(f" Path: {repo_root}")
+    print("==================================================")
+
+    if args.fix:
+        run_autofix(repo_root, verbose=args.verbose)
+
+    if args.act:
+        sys.exit(run_gh_act(repo_root, workflow=args.workflow, job=args.job))
+
+    # 1. Check for dedicated hook script if requested or if no specific workflow/job is targeted
+    hook_script = find_hook_script(repo_root)
+    if args.hook or (hook_script and not args.workflow and not args.job):
+        print(
+            f"--> Found dedicated quality gate script: {hook_script.relative_to(repo_root)}"
+        )
+        if args.list:
+            print(f"Discovered hook gate: {hook_script}")
+            return
+
+        print("Executing pre-push quality gate script...\n")
+        start_time = time.time()
+        ret, stdout, stderr = run_command(
+            str(hook_script), repo_root, capture=not args.verbose
+        )
+        duration = time.time() - start_time
+
+        if ret == 0:
+            if not args.verbose:
+                print(stdout.strip())
+            print(f"\n✅ All local quality gates passed! ({duration:.2f}s)")
+            sys.exit(0)
+        else:
+            print(stdout)
+            print(stderr, file=sys.stderr)
+            print(
+                f"\n❌ Pre-push quality gate failed with exit code {ret} ({duration:.2f}s).",
+                file=sys.stderr,
+            )
+            print(
+                "Please fix the reported errors above before committing or pushing.",
+                file=sys.stderr,
+            )
+            sys.exit(ret)
+
+    # 2. Extract steps from .github/workflows/*.yml
+    workflow_steps = parse_workflow_steps(repo_root)
+
+    # Filter steps if requested
+    if args.workflow:
+        workflow_steps = [
+            s
+            for s in workflow_steps
+            if s.get("workflow_file") == args.workflow
+            or args.workflow in s.get("workflow_file", "")
+        ]
+    if args.job:
+        workflow_steps = [s for s in workflow_steps if s.get("job_id") == args.job]
+
+    # If no workflow steps, use fallback quality gates
+    if not workflow_steps:
+        workflow_steps = fallback_quality_gates(repo_root)
+
+    if not workflow_steps:
+        print(
+            "⚠️ No CI workflow files or recognized quality gates found for this repository."
+        )
+        sys.exit(0)
+
+    if args.list:
+        print(f"Found {len(workflow_steps)} quality gate step(s):")
+        for idx, s in enumerate(workflow_steps, 1):
+            wf_info = (
+                f" ({s.get('workflow_file')}:{s.get('job_id')})"
+                if "workflow_file" in s
+                else ""
+            )
+            print(f"  {idx}. [{s['step_name']}]{wf_info}")
+            for line in s["command"].splitlines():
+                print(f"      $ {line}")
+        return
+
+    # 3. Execute quality gate steps sequentially
+    total_steps = len(workflow_steps)
+    passed_steps = 0
+    failed_steps = 0
+
+    print(f"Running {total_steps} quality gate step(s)...\n")
+
+    for idx, s in enumerate(workflow_steps, 1):
+        step_name = s["step_name"]
+        cmd = s["command"]
+        env = s.get("env", {})
+        wf_info = f" [{s.get('workflow_file')}]" if "workflow_file" in s else ""
+
+        print(f"[{idx}/{total_steps}] Running: {step_name}{wf_info}...")
+        if args.verbose:
+            print(f"  Command: {cmd}")
+
+        start_time = time.time()
+        ret, stdout, stderr = run_command(
+            cmd, repo_root, env_vars=env, capture=not args.verbose
+        )
+        duration = time.time() - start_time
+
+        if ret == 0:
+            passed_steps += 1
+            print(f"    --> ✅ PASS ({duration:.2f}s)")
+            if args.verbose and stdout.strip():
+                print(stdout.strip())
+        else:
+            failed_steps += 1
+            print(f"    --> ❌ FAIL (exit {ret}, {duration:.2f}s)")
+            print("\n" + "=" * 50)
+            print(f" FAILURE OUTPUT: {step_name}")
+            print("=" * 50)
+            if stdout.strip():
+                print(stdout.strip())
+            if stderr.strip():
+                print(stderr.strip(), file=sys.stderr)
+            print("=" * 50)
+            print(
+                f"\n❌ Step '{step_name}' failed. Fix errors above before committing.",
+                file=sys.stderr,
+            )
+            print(
+                "Tip: Run with --fix to automatically format code or fix common linter issues.\n",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+    print("\n==================================================")
+    print(
+        f" ✅ ALL QUALITY GATES PASSED: {passed_steps}/{total_steps} steps succeeded."
+    )
+    print("==================================================")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

@@ -18,6 +18,11 @@ Before staging any git commit, agents must execute local verification commands t
   ```bash
   markdownlint docs/ README.md examples/README.md AGENTS.md CLAUDE.md
   ```
+- **Verify Python Scripts**: Use Ruff to lint and format check `scripts/run-local-ci`:
+  ```bash
+  uv run ruff check scripts/run-local-ci
+  uv run ruff format --check scripts/run-local-ci
+  ```
 - **Mandatory Pre-Commit Quality Gate**: Run the repository verification script and confirm 100% check pass rate:
   ```bash
   run-local-ci
