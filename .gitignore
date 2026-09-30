@@ -2,3 +2,8 @@
 .agents/skills/*
 !.agents/skills/airfire-cicd/
 skills-lock.json
+
+# Ephemeral planning & transient execution artifacts
+.superpowers/
+docs/superpowers/
+.plans/
