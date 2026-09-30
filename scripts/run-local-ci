@@ -256,8 +256,15 @@ def modernize_command(cmd: str) -> str:
         elif stripped.startswith("ty "):
             modern_lines.append(f"{indent}uv run {stripped}")
         elif stripped.startswith("python ") or stripped.startswith("python3 "):
-            # Wrap with uv run for modern virtual environment execution
-            modern_lines.append(f"{indent}uv run {stripped}")
+            # Wrap with uv run for modern virtual environment execution.
+            # If executing a .py file directly, strip python/python3 so uv run parses PEP 723 metadata.
+            parts = stripped.split(maxsplit=1)
+            target_script = parts[1] if len(parts) > 1 else ""
+            first_arg = target_script.split()[0] if target_script.split() else ""
+            if first_arg.endswith(".py"):
+                modern_lines.append(f"{indent}uv run {target_script}")
+            else:
+                modern_lines.append(f"{indent}uv run {stripped}")
         else:
             modern_lines.append(line)
     return "\n".join(modern_lines)
