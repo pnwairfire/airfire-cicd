@@ -23,6 +23,16 @@ on:
         required: false
         type: string
         default: "-v"
+      run-ty:
+        description: "Execute static type checking via ty"
+        required: false
+        type: boolean
+        default: false
+      install-k6:
+        description: "Install Grafana k6 CLI binary for synthetic canary testing"
+        required: false
+        type: boolean
+        default: false
       working-directory:
         description: "Directory containing python project"
         required: false
@@ -80,6 +90,21 @@ jobs:
           uv run ruff check .
           echo "==> Running ruff format --check..."
           uv run ruff format --check .
+
+      - name: Static Type Check (ty)
+        if: ${{ inputs.run-ty }}
+        shell: bash
+        run: |
+          if uv run which ty > /dev/null 2>&1; then
+            echo "==> Running ty check..."
+            uv run ty check src/
+          else
+            echo "==> ty not found in environment; skipping."
+          fi
+
+      - name: Setup k6 CLI
+        if: ${{ inputs.install-k6 }}
+        uses: grafana/setup-k6-action@v1
 
       - name: Test Suite (pytest)
         if: ${{ inputs.run-tests }}

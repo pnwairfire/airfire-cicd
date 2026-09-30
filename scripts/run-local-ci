@@ -424,6 +424,20 @@ def expand_reusable_workflow(
                     "env": {},
                 }
             )
+        run_ty = with_inputs.get("run-ty", False)
+        if str(run_ty).lower() in ("true", "1", "yes"):
+            src_dir = f"{workdir}/src" if workdir != "." else "src"
+            if (repo_root / src_dir).exists():
+                steps.append(
+                    {
+                        "workflow_file": wf_path.name,
+                        "workflow_name": wf_name,
+                        "job_id": job_id,
+                        "step_name": f"Static Type Check (ty) ({workdir})",
+                        "command": f"uv run ty check {src_dir}",
+                        "env": {},
+                    }
+                )
         if str(run_tests).lower() not in ("false", "0", "no"):
             test_dir = f"{workdir}/tests" if workdir != "." else "tests"
             if (repo_root / test_dir).exists():
