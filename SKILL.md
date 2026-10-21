@@ -77,6 +77,7 @@ concurrency:
 ### Keyless AWS Authentication (OIDC)
 - **Never** add static AWS Access Keys (`AKIA...`) or Secret Access Keys to GitHub Secrets.
 - Use OpenID Connect (OIDC) federation with AWS Security Token Service (STS).
+- Enforce GitHub's immutable OIDC subject claims (`use_immutable_subject: true`) and configure AWS IAM trust policies with numeric Organization and Repository IDs (`repo:pnwairfire@11236785/<repo>@<repo_id>:...`) to prevent repository rename (`repo-jacking`) attacks.
 - Workflows must declare minimum permissions and specify `audience: sts.amazonaws.com`:
   ```yaml
   permissions:

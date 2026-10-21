@@ -32,6 +32,18 @@ When a GitHub Actions runner requests credentials via `aws-actions/configure-aws
 | `Action` | `sts:AssumeRoleWithWebIdentity` | Grants permission to exchange a Web Identity JWT for STS credentials. |
 | `token.actions.githubusercontent.com:aud` | `sts.amazonaws.com` | Ensures the token was minted specifically for AWS authentication. |
 
+### GitHub Immutable OIDC Subject Claim Enforcement
+
+Effective July 15, 2026, GitHub enforces immutable subject claims (`use_immutable_subject: true`) across GitHub Actions OpenID Connect tokens to mitigate repository rename and account takeover (`repo-jacking`) attacks.
+
+When `use_immutable_subject: true` is active, GitHub appends the immutable numeric Organization ID (`@11236785` for `pnwairfire`) and numeric Repository ID (`@<REPO_ID>`) directly into `token.actions.githubusercontent.com:sub`:
+
+- **Immutable Subject Format (Standard)**: `repo:pnwairfire@11236785/<REPO_NAME>@<REPO_ID>:<context>`
+- **Legacy Subject Format (Deprecated)**: `repo:pnwairfire/<REPO_NAME>:<context>`
+
+> [!IMPORTANT]
+> During migration, Terraform IAM trust policies may include both the immutable subject and the legacy subject in a `StringLike` array to maintain backward compatibility before and after `use_immutable_subject: true` is enabled on the repository. New roles and post-migration configurations should enforce the immutable subject format.
+
 ---
 
 ## 2. Standard Trust Policy Templates
@@ -54,7 +66,7 @@ Restricts role assumption strictly to workflows executing inside the protected `
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:environment:prod"
+          "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPO_NAME>@<REPO_ID>:environment:prod"
         }
       }
     }
@@ -82,7 +94,7 @@ Restricts role assumption to pushes, merges, or pull requests targeting the `mai
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPO_NAME>@<REPO_ID>:ref:refs/heads/main"
         }
       }
     }
@@ -112,7 +124,7 @@ Restricts role assumption to builds triggered by versioned Semantic Version tags
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:ref:refs/tags/v*"
+          "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPO_NAME>@<REPO_ID>:ref:refs/tags/v*"
         }
       }
     }
@@ -122,7 +134,54 @@ Restricts role assumption to builds triggered by versioned Semantic Version tags
 
 ---
 
-## 3. Security Invariants
+## 3. Organization & Repository ID Reference (`pnwairfire` `@11236785`)
 
-- **Wildcard Scoping**: Never configure `"repo:pnwairfire/*"` without branch, environment, or tag restrictions. Overly broad wildcards permit pull requests from any repository in the organization to assume privileged cloud roles.
+All `pnwairfire` repositories share the immutable GitHub Organization ID `11236785`. Use the table below to populate `<REPO_NAME>@<REPO_ID>` in IAM trust policies:
+
+| Repository (`pnwairfire/<repo>`) | Numeric Repo ID | AWS Account | Immutable Subject Prefix (`sub_claim_prefix`) |
+| :--- | :--- | :--- | :--- |
+| `airfire-auth` | `1326940573` | EPA (`339712853872`) | `repo:pnwairfire@11236785/airfire-auth@1326940573` |
+| `airfire-cicd` | `1277308994` | UW (`545607068190`) | `repo:pnwairfire@11236785/airfire-cicd@1277308994` |
+| `airfire-observability` | `1393813150` | UW / EPA | `repo:pnwairfire@11236785/airfire-observability@1393813150` |
+| `airfire-shared-ui` | `1184619821` | EPA (`339712853872`) | `repo:pnwairfire@11236785/airfire-shared-ui@1184619821` |
+| `cmap-stack` | `1263170154` | UW (`545607068190`) | `repo:pnwairfire@11236785/cmap-stack@1263170154` |
+| `elwood-pipeline` | `1295957651` | UW (`545607068190`) | `repo:pnwairfire@11236785/elwood-pipeline@1295957651` |
+| `fasm-historical-service` | `1210101005` | UW (`545607068190`) | `repo:pnwairfire@11236785/fasm-historical-service@1210101005` |
+| `fasm-pipeline` | `1292764358` | UW (`545607068190`) | `repo:pnwairfire@11236785/fasm-pipeline@1292764358` |
+| `fasm-v4` | `579201684` | EPA (`339712853872`) | `repo:pnwairfire@11236785/fasm-v4@579201684` |
+| `inciweb-pipeline` | `1296020599` | UW (`545607068190`) | `repo:pnwairfire@11236785/inciweb-pipeline@1296020599` |
+| `knowledge-base` | `1365025430` | UW (`545607068190`) | `repo:pnwairfire@11236785/knowledge-base@1365025430` |
+| `monitoring-v5` | `1310207779` | UW (`545607068190`) | `repo:pnwairfire@11236785/monitoring-v5@1310207779` |
+| `outlook-pdf` | `1019676471` | UW (`545607068190`) | `repo:pnwairfire@11236785/outlook-pdf@1019676471` |
+| `outlook-viewer-v2` | `1280566862` | UW (`545607068190`) | `repo:pnwairfire@11236785/outlook-viewer-v2@1280566862` |
+| `prefect-af-managed` | `1279653924` | UW (`545607068190`) | `repo:pnwairfire@11236785/prefect-af-managed@1279653924` |
+| `prefect-af-mock` | `1276512755` | UW (`545607068190`) | `repo:pnwairfire@11236785/prefect-af-mock@1276512755` |
+| `smoke-airnow-gov` | `1267726073` | EPA (`339712853872`) | `repo:pnwairfire@11236785/smoke-airnow-gov@1267726073` |
+| `tileserver-pwfsl` | `561554527` | EPA (`339712853872`) | `repo:pnwairfire@11236785/tileserver-pwfsl@561554527` |
+| `weatherlayers-pwfsl` | `1149482117` | UW (`545607068190`) | `repo:pnwairfire@11236785/weatherlayers-pwfsl@1149482117` |
+| `wiki-infra` | `1364986112` | UW (`545607068190`) | `repo:pnwairfire@11236785/wiki-infra@1364986112` |
+
+### Inspecting and Enabling Immutable Subject Claims via GitHub CLI
+
+Use the GitHub CLI (`gh api`) to query numeric IDs, inspect current OIDC subject settings, and opt into immutable subject claims:
+
+```bash
+# 1. Query numeric repository ID
+gh api repos/pnwairfire/<repo> --jq '.id'
+
+# 2. Inspect current OIDC subject claim configuration
+gh api repos/pnwairfire/<repo>/actions/oidc/customization/sub
+
+# 3. Enable immutable OIDC subject claims (after updating AWS IAM trust policies)
+gh api -X PUT repos/pnwairfire/<repo>/actions/oidc/customization/sub \
+  -F use_default=true \
+  -F use_immutable_subject=true
+```
+
+---
+
+## 4. Security Invariants
+
+- **Wildcard Scoping**: Never configure `"repo:pnwairfire@11236785/*"` or `"repo:pnwairfire/*"` without repository, branch, environment, or tag restrictions. Overly broad wildcards permit pull requests from any repository in the organization to assume privileged cloud roles.
 - **Audience Verification**: Always include `"token.actions.githubusercontent.com:aud": "sts.amazonaws.com"`. Omitting audience validation allows tokens minted for other services to be presented to STS.
+- **Immutable Subject Enforcement**: Always update the AWS IAM role trust policy to accept `repo:pnwairfire@11236785/<REPO_NAME>@<REPO_ID>:...` *before* enabling `use_immutable_subject: true` on the GitHub repository.
