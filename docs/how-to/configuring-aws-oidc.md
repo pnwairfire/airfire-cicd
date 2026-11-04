@@ -66,7 +66,23 @@ Maintain environment isolation by creating distinct IAM roles for development an
 
 ## 3. Restrict the Role Trust Policy
 
-To prevent unauthorized GitHub repositories or branches from assuming the role, restrict the trust relationship using GitHub subject (`sub`) claims.
+To prevent unauthorized GitHub repositories, branches, or renamed repositories (`repo-jacking`) from assuming the role, restrict the trust relationship using GitHub's immutable OIDC subject (`sub`) claims (`repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:...`).
+
+### Query Numeric Repository ID and Enable Immutable Subject Claims
+
+1. Query the target repository's immutable numeric ID via the GitHub CLI (or look it up in the [AWS IAM OIDC Trust Policy Specification](../reference/iam-trust-policy-spec.md)):
+   ```bash
+   gh api repos/pnwairfire/<repo> --jq '.id'
+   ```
+2. Update the IAM role trust policy in AWS (steps below) so it permits the immutable subject format (`repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:*`).
+3. Enable immutable OIDC subject claims on the GitHub repository:
+   ```bash
+   gh api -X PUT repos/pnwairfire/<repo>/actions/oidc/customization/sub \
+     -F use_default=true \
+     -F use_immutable_subject=true
+   ```
+
+### Update the IAM Trust Policy Document
 
 1. Navigate to the created IAM role and open the **Trust relationships** tab.
 2. Click **Edit trust policy** and update the policy document:
@@ -87,7 +103,7 @@ To prevent unauthorized GitHub repositories or branches from assuming the role, 
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPOSITORY_NAME>:*"
+          "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:*"
         }
       }
     }
@@ -102,17 +118,17 @@ Refine the `StringLike` or `StringEquals` condition to enforce least-privilege r
 - **Branch-Restricted (Development Role)**:
   Permits role assumption strictly from pushes or pull requests targeting `main`:
   ```json
-  "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:ref:refs/heads/main"
+  "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:ref:refs/heads/main"
   ```
 - **Environment-Restricted (Production Role - Recommended)**:
   Restricts role assumption to workflow jobs running inside the protected `prod` GitHub Environment (which requires human approval):
   ```json
-  "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:environment:prod"
+  "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:environment:prod"
   ```
 - **Tag-Restricted (Release Builds)**:
   Restricts role assumption to versioned Semantic Version tags:
   ```json
-  "token.actions.githubusercontent.com:sub": "repo:pnwairfire/<REPO_NAME>:ref:refs/tags/v*"
+  "token.actions.githubusercontent.com:sub": "repo:pnwairfire@11236785/<REPOSITORY_NAME>@<REPO_ID>:ref:refs/tags/v*"
   ```
 
 ---

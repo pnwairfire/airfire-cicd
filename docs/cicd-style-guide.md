@@ -126,6 +126,7 @@ All workflows authenticate to AWS using OpenID Connect (OIDC) federation, reques
       aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
       audience: sts.amazonaws.com
   ```
+- IAM role trust policies must enforce GitHub's immutable OIDC subject claim format (`repo:pnwairfire@11236785/<repo>@<repo_id>:...`) and repositories must enable `use_immutable_subject: true` to mitigate repository rename (`repo-jacking`) attacks.
 - Detailed setup instructions are available in [How to Configure AWS OIDC](how-to/configuring-aws-oidc.md) and the [AWS IAM OIDC Trust Policy Specification](reference/iam-trust-policy-spec.md).
 
 ### 3.2 Clear Scoping: GitHub Variables vs. GitHub Secrets
