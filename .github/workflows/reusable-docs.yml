@@ -45,19 +45,22 @@ jobs:
       - name: Validate Diátaxis Frontmatter & Namespace Hubs
         if: ${{ inputs.validate_frontmatter }}
         shell: bash
+        env:
+          INPUT_DOCS_PATH: ${{ inputs.docs_path }}
         run: |
-          DOCS_DIR="${{ inputs.docs_path }}"
+          DOCS_DIR="$INPUT_DOCS_PATH"
           if [ ! -d "$DOCS_DIR" ]; then
             echo "Documentation directory '$DOCS_DIR' not found. Skipping."
             exit 0
           fi
 
           python3 - << 'PYEOF'
+          import os
           import sys
           import yaml
           from pathlib import Path
 
-          docs_dir = Path("${{ inputs.docs_path }}")
+          docs_dir = Path(os.environ.get("INPUT_DOCS_PATH", "docs"))
           errors = []
           REQUIRED_FIELDS = ["title", "description", "published", "editor", "tags"]
 
@@ -144,8 +147,10 @@ jobs:
       - name: Run Markdown Linting (markdownlint-cli2)
         if: ${{ inputs.run_markdownlint }}
         shell: bash
+        env:
+          INPUT_DOCS_PATH: ${{ inputs.docs_path }}
         run: |
-          DOCS_DIR="${{ inputs.docs_path }}"
+          DOCS_DIR="$INPUT_DOCS_PATH"
           if [ -d "$DOCS_DIR" ]; then
             npx --yes markdownlint-cli2 "${DOCS_DIR}/**/*.md"
           fi

@@ -38,14 +38,21 @@ except ImportError:
     yaml = None
 
 
-def find_repo_root(start_dir: Path) -> Path:
+def find_repo_root(start_dir: Optional[Path] = None) -> Path:
     """Find git repository root or fallback to start_dir."""
-    current = start_dir.resolve()
+    target_path = (
+        os.path.realpath(str(start_dir))
+        if start_dir is not None
+        else os.path.realpath(os.getcwd())
+    )
+    if not target_path.startswith(os.sep) or not os.path.isdir(target_path):
+        raise ValueError(f"Target directory does not exist: {start_dir}")
+    current = Path(target_path)
     while current != current.parent:
         if (current / ".git").exists():
             return current
         current = current.parent
-    return start_dir.resolve()
+    return current
 
 
 def run_command(
@@ -63,15 +70,21 @@ def run_command(
     if env_vars:
         env.update(env_vars)
 
+    safe_cwd = os.path.abspath(str(cwd))
+    # Use direct argument vector execution when no shell metacharacters are present
+    shell_syntax = any(
+        op in cmd for op in ("&&", "||", "|", ";", "\n", ">", "<", "*", "$", "`")
+    )
+    exec_args = ["/bin/bash", "-c", cmd] if shell_syntax else shlex.split(cmd)
+
     process = subprocess.Popen(
-        cmd,
-        cwd=str(cwd),
-        shell=True,
+        exec_args,
+        cwd=safe_cwd,
+        shell=False,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
         text=True,
         env=env,
-        executable="/bin/bash",
     )
     stdout, stderr = process.communicate()
     return process.returncode, stdout or "", stderr or ""
@@ -270,7 +283,6 @@ def modernize_command(cmd: str) -> str:
     return "\n".join(modern_lines)
 
 
-
 def validate_documentation(docs_dir: Path) -> int:
     """Validate Diátaxis Frontmatter & Namespace Hubs matching reusable-docs.yml."""
     if not docs_dir.exists() or not docs_dir.is_dir():
@@ -280,15 +292,32 @@ def validate_documentation(docs_dir: Path) -> int:
     errors = []
     REQUIRED_FIELDS = ["title", "description", "published", "editor", "tags"]
     ASSET_DIR_NAMES = {
-        "assets", "stylesheets", "javascripts", "images", "img", "static",
-        "media", "css", "js", "branding", "fonts", "icons", "scratch",
-        "superpowers", ".agents", ".superpowers", ".git", "node_modules"
+        "assets",
+        "stylesheets",
+        "javascripts",
+        "images",
+        "img",
+        "static",
+        "media",
+        "css",
+        "js",
+        "branding",
+        "fonts",
+        "icons",
+        "scratch",
+        "superpowers",
+        ".agents",
+        ".superpowers",
+        ".git",
+        "node_modules",
     }
 
     print(f"==> Auditing documentation in {docs_dir.resolve()}...")
 
     # 1. Namespace README.md / index.md Hub Check
-    subdirs = [d for d in docs_dir.glob("**/") if d.is_dir() and not d.name.startswith(".")]
+    subdirs = [
+        d for d in docs_dir.glob("**/") if d.is_dir() and not d.name.startswith(".")
+    ]
     for d in subdirs:
         try:
             rel_parts = set(d.relative_to(docs_dir).parts)
@@ -298,13 +327,19 @@ def validate_documentation(docs_dir: Path) -> int:
             continue
         if d.is_symlink() and not d.resolve().exists():
             continue
-        md_in_dir = [f for f in d.glob("**/*.md") if not any(p in ASSET_DIR_NAMES for p in f.parts)]
+        md_in_dir = [
+            f
+            for f in d.glob("**/*.md")
+            if not any(p in ASSET_DIR_NAMES for p in f.parts)
+        ]
         if not md_in_dir:
             continue
         readme = d / "README.md"
         index = d / "index.md"
         if not readme.exists() and not index.exists():
-            errors.append(f"Missing namespace hub: {d}/README.md or index.md does not exist.")
+            errors.append(
+                f"Missing namespace hub: {d}/README.md or index.md does not exist."
+            )
 
     # 2. Frontmatter & Heading Checks
     md_files = sorted(docs_dir.glob("**/*.md"))
@@ -325,7 +360,9 @@ def validate_documentation(docs_dir: Path) -> int:
             continue
 
         if not text.startswith("---"):
-            errors.append(f"{rel}: Missing YAML frontmatter marker '---' at start of file.")
+            errors.append(
+                f"{rel}: Missing YAML frontmatter marker '---' at start of file."
+            )
             continue
 
         parts = text.split("---", 2)
@@ -347,7 +384,9 @@ def validate_documentation(docs_dir: Path) -> int:
                 errors.append(f"{rel}: Frontmatter field '{field}' is empty.")
 
         if data.get("editor") != "markdown":
-            errors.append(f"{rel}: Frontmatter 'editor' must be explicitly set to 'markdown'.")
+            errors.append(
+                f"{rel}: Frontmatter 'editor' must be explicitly set to 'markdown'."
+            )
 
         if not isinstance(data.get("tags"), list):
             errors.append(f"{rel}: Frontmatter 'tags' must be a list.")
@@ -359,12 +398,14 @@ def validate_documentation(docs_dir: Path) -> int:
             print(f"  - {err}")
         return 1
     else:
-        print(f"\n✅ All {valid_count} markdown files and namespace hubs passed Diátaxis validation.")
+        print(
+            f"\n✅ All {valid_count} markdown files and namespace hubs passed Diátaxis validation."
+        )
         return 0
 
 
 def expand_reusable_workflow(
-    job_id: str, job: dict, wf_path: Path, repo_root: Path, wf_name: str
+    job_id: str, job: dict, wf_filename: str, repo_root: Path, wf_name: str
 ) -> List[Dict]:
     """Expand jobs calling reusable workflows (reusable-docs.yml, reusable-python.yml, etc.)."""
     uses = str(job.get("uses", "")).strip()
@@ -376,12 +417,13 @@ def expand_reusable_workflow(
 
     # 1. reusable-docs.yml
     if "reusable-docs.yml" in uses:
-        docs_path = str(with_inputs.get("docs_path", "docs"))
+        raw_docs_path = str(with_inputs.get("docs_path", "docs"))
+        docs_path = shlex.quote(raw_docs_path)
         validate_fm = with_inputs.get("validate_frontmatter", True)
         if str(validate_fm).lower() not in ("false", "0", "no"):
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"Diátaxis Frontmatter & Namespace Hubs ({docs_path})",
@@ -391,13 +433,14 @@ def expand_reusable_workflow(
             )
         run_mdlint = with_inputs.get("run_markdownlint", True)
         if str(run_mdlint).lower() not in ("false", "0", "no"):
+            glob_arg = shlex.quote(f"{raw_docs_path}/**/*.md")
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"Markdownlint Quality Check ({docs_path})",
-                    "command": f'npx --yes markdownlint-cli2 "{docs_path}/**/*.md"',
+                    "command": f"npx --yes markdownlint-cli2 {glob_arg}",
                     "env": {},
                 }
             )
@@ -405,15 +448,17 @@ def expand_reusable_workflow(
 
     # 2. reusable-python.yml
     if "reusable-python.yml" in uses:
-        workdir = str(with_inputs.get("working-directory", "."))
+        raw_workdir = str(with_inputs.get("working-directory", "."))
+        workdir = shlex.quote(raw_workdir)
         run_ruff = with_inputs.get("run-ruff", True)
         run_tests = with_inputs.get("run-tests", True)
-        pytest_args = str(with_inputs.get("pytest-args", "-v"))
+        raw_pytest_args = str(with_inputs.get("pytest-args", "-v"))
+        pytest_args = " ".join(shlex.quote(arg) for arg in shlex.split(raw_pytest_args))
 
         if str(run_ruff).lower() not in ("false", "0", "no"):
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"Ruff Lint Check ({workdir})",
@@ -423,7 +468,7 @@ def expand_reusable_workflow(
             )
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"Ruff Format Check ({workdir})",
@@ -433,11 +478,12 @@ def expand_reusable_workflow(
             )
         run_ty = with_inputs.get("run-ty", False)
         if str(run_ty).lower() in ("true", "1", "yes"):
-            src_dir = f"{workdir}/src" if workdir != "." else "src"
-            if (repo_root / src_dir).exists():
+            raw_src_dir = f"{raw_workdir}/src" if raw_workdir != "." else "src"
+            src_dir = shlex.quote(raw_src_dir)
+            if (repo_root / raw_src_dir).exists():
                 steps.append(
                     {
-                        "workflow_file": wf_path.name,
+                        "workflow_file": wf_filename,
                         "workflow_name": wf_name,
                         "job_id": job_id,
                         "step_name": f"Static Type Check (ty) ({workdir})",
@@ -446,11 +492,12 @@ def expand_reusable_workflow(
                     }
                 )
         if str(run_tests).lower() not in ("false", "0", "no"):
-            test_dir = f"{workdir}/tests" if workdir != "." else "tests"
-            if (repo_root / test_dir).exists():
+            raw_test_dir = f"{raw_workdir}/tests" if raw_workdir != "." else "tests"
+            test_dir = shlex.quote(raw_test_dir)
+            if (repo_root / raw_test_dir).exists():
                 steps.append(
                     {
-                        "workflow_file": wf_path.name,
+                        "workflow_file": wf_filename,
                         "workflow_name": wf_name,
                         "job_id": job_id,
                         "step_name": f"Pytest Suite ({workdir})",
@@ -462,12 +509,19 @@ def expand_reusable_workflow(
 
     # 3. reusable-terraform.yml
     if "reusable-terraform.yml" in uses:
-        tf_dir = str(with_inputs.get("working-directory", with_inputs.get("terraform_directory", ".")))
-        check_fmt = with_inputs.get("run-fmt", with_inputs.get("check_formatting", True))
+        raw_tf_dir = str(
+            with_inputs.get(
+                "working-directory", with_inputs.get("terraform_directory", ".")
+            )
+        )
+        tf_dir = shlex.quote(raw_tf_dir)
+        check_fmt = with_inputs.get(
+            "run-fmt", with_inputs.get("check_formatting", True)
+        )
         if str(check_fmt).lower() not in ("false", "0", "no"):
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"Terraform Format Check ({tf_dir})",
@@ -478,10 +532,10 @@ def expand_reusable_workflow(
 
         run_tflint = with_inputs.get("run-tflint", True)
         if str(run_tflint).lower() not in ("false", "0", "no"):
-            chdir_flag = f"--chdir={tf_dir}" if tf_dir != "." else ""
+            chdir_flag = f"--chdir={tf_dir}" if raw_tf_dir != "." else ""
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"TFLint Check ({tf_dir})",
@@ -492,7 +546,9 @@ def expand_reusable_workflow(
 
         run_validate = with_inputs.get("run-validate", True)
         if str(run_validate).lower() not in ("false", "0", "no"):
-            search_root = (repo_root / tf_dir).resolve() if tf_dir != "." else repo_root
+            search_root = (
+                (repo_root / raw_tf_dir).resolve() if raw_tf_dir != "." else repo_root
+            )
             if search_root.exists():
                 tf_dirs = set()
                 for tf_file in search_root.rglob("*.tf"):
@@ -506,13 +562,14 @@ def expand_reusable_workflow(
                         rel_dir = mod_dir.relative_to(repo_root)
                     except ValueError:
                         rel_dir = mod_dir
+                    quoted_rel_dir = shlex.quote(str(rel_dir))
                     steps.append(
                         {
-                            "workflow_file": wf_path.name,
+                            "workflow_file": wf_filename,
                             "workflow_name": wf_name,
                             "job_id": job_id,
-                            "step_name": f"Terraform Validate ({rel_dir})",
-                            "command": f"terraform -chdir={rel_dir} init -backend=false && terraform -chdir={rel_dir} validate",
+                            "step_name": f"Terraform Validate ({quoted_rel_dir})",
+                            "command": f"terraform -chdir={quoted_rel_dir} init -backend=false && terraform -chdir={quoted_rel_dir} validate",
                             "env": {},
                         }
                     )
@@ -520,28 +577,33 @@ def expand_reusable_workflow(
 
     # 4. reusable-node.yml
     if "reusable-node.yml" in uses:
-        workdir = str(with_inputs.get("working-directory", "."))
+        raw_workdir = str(with_inputs.get("working-directory", "."))
+        workdir = shlex.quote(raw_workdir)
         run_lint = with_inputs.get("run-lint", True)
         run_tests = with_inputs.get("run-tests", True)
         if str(run_lint).lower() not in ("false", "0", "no"):
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"NPM Lint ({workdir})",
-                    "command": f"npm --prefix {workdir} run lint" if workdir != "." else "npm run lint",
+                    "command": f"npm --prefix {workdir} run lint"
+                    if raw_workdir != "."
+                    else "npm run lint",
                     "env": {},
                 }
             )
         if str(run_tests).lower() not in ("false", "0", "no"):
             steps.append(
                 {
-                    "workflow_file": wf_path.name,
+                    "workflow_file": wf_filename,
                     "workflow_name": wf_name,
                     "job_id": job_id,
                     "step_name": f"NPM Test ({workdir})",
-                    "command": f"npm --prefix {workdir} test" if workdir != "." else "npm test",
+                    "command": f"npm --prefix {workdir} test"
+                    if raw_workdir != "."
+                    else "npm test",
                     "env": {},
                 }
             )
@@ -552,22 +614,25 @@ def expand_reusable_workflow(
 
 def parse_workflow_steps(repo_root: Path) -> List[Dict]:
     """Parse .github/workflows/*.yml and extract test/lint/validation steps with matrix expansion."""
-    wf_dir = repo_root / ".github" / "workflows"
+    wf_dir = (repo_root / ".github" / "workflows").resolve()
     if not wf_dir.exists() or yaml is None:
         return []
 
     discovered_steps = []
     workflow_files = sorted(wf_dir.glob("*.yml")) + sorted(wf_dir.glob("*.yaml"))
+    wf_dir_str = os.path.realpath(str(wf_dir))
 
     for wf_path in workflow_files:
         try:
-            with open(wf_path, "r", encoding="utf-8") as f:
-                wf_data = yaml.safe_load(f)
+            if not os.path.realpath(wf_path).startswith(wf_dir_str + os.sep):
+                continue
+            wf_data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
             if not isinstance(wf_data, dict):
                 continue
 
-            wf_name = wf_data.get("name", wf_path.name)
-            if not is_ci_validation_workflow(wf_name, wf_path.name, wf_data):
+            wf_filename = shlex.quote(wf_path.name)
+            wf_name = str(wf_data.get("name", wf_filename))
+            if not is_ci_validation_workflow(wf_name, wf_filename, wf_data):
                 continue
 
             jobs = wf_data.get("jobs", {})
@@ -586,7 +651,7 @@ def parse_workflow_steps(repo_root: Path) -> List[Dict]:
                 uses_clause = str(job.get("uses", "")).strip()
                 if uses_clause and not steps:
                     reusable_steps = expand_reusable_workflow(
-                        job_id, job, wf_path, repo_root, wf_name
+                        job_id, job, wf_filename, repo_root, wf_name
                     )
                     discovered_steps.extend(reusable_steps)
                     continue
@@ -683,7 +748,7 @@ def parse_workflow_steps(repo_root: Path) -> List[Dict]:
 
                         discovered_steps.append(
                             {
-                                "workflow_file": wf_path.name,
+                                "workflow_file": wf_filename,
                                 "workflow_name": wf_name,
                                 "job_id": job_id,
                                 "step_name": step_name,
@@ -731,25 +796,28 @@ def fallback_quality_gates(repo_root: Path) -> List[Dict]:
             )
 
     # Documentation project detection
-    doc_candidates = [
-        d
-        for d in ["docs", "services", "operations", "architecture", "reference"]
-        if (repo_root / d).is_dir()
-    ]
-    if doc_candidates or (repo_root / "mkdocs.yml").exists():
-        target = "docs" if (repo_root / "docs").is_dir() else (doc_candidates[0] if doc_candidates else "docs")
+    raw_target: Optional[str] = None
+    for d in ("docs", "services", "operations", "architecture", "reference"):
+        if (repo_root / d).is_dir():
+            raw_target = "docs" if (repo_root / "docs").is_dir() else d
+            break
+    if raw_target is None and (repo_root / "mkdocs.yml").exists():
+        raw_target = "docs"
+
+    if raw_target is not None:
+        quoted_target = shlex.quote(raw_target)
         steps.append(
             {
-                "step_name": f"Diátaxis Frontmatter & Hubs Check ({target})",
-                "command": f"run-local-ci --validate-docs {target}",
+                "step_name": f"Diátaxis Frontmatter & Hubs Check ({quoted_target})",
+                "command": f"run-local-ci --validate-docs {quoted_target}",
                 "env": {},
                 "source": "fallback-docs",
             }
         )
         steps.append(
             {
-                "step_name": f"Markdownlint Quality Check ({target})",
-                "command": f'npx --yes markdownlint-cli2 "{target}/**/*.md"',
+                "step_name": f"Markdownlint Quality Check ({quoted_target})",
+                "command": f"npx --yes markdownlint-cli2 {shlex.quote(raw_target + '/**/*.md')}",
                 "env": {},
                 "source": "fallback-docs",
             }
@@ -897,7 +965,7 @@ def main():
         print("Executing pre-push quality gate script...\n")
         start_time = time.time()
         ret, stdout, stderr = run_command(
-            str(hook_script), repo_root, capture=not args.verbose
+            shlex.quote(str(hook_script)), repo_root, capture=not args.verbose
         )
         duration = time.time() - start_time
 
@@ -924,14 +992,16 @@ def main():
 
     # Filter steps if requested
     if args.workflow:
+        wf_filter = shlex.quote(args.workflow)
         workflow_steps = [
             s
             for s in workflow_steps
-            if s.get("workflow_file") == args.workflow
-            or args.workflow in s.get("workflow_file", "")
+            if s.get("workflow_file") == wf_filter
+            or wf_filter in s.get("workflow_file", "")
         ]
     if args.job:
-        workflow_steps = [s for s in workflow_steps if s.get("job_id") == args.job]
+        job_filter = shlex.quote(args.job)
+        workflow_steps = [s for s in workflow_steps if s.get("job_id") == job_filter]
 
     # If no workflow steps, use fallback quality gates
     if not workflow_steps:

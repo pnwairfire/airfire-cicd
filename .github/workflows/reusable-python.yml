@@ -60,10 +60,15 @@ jobs:
           version: "latest"
 
       - name: Set up Python ${{ inputs.python-version }}
-        run: uv python install ${{ inputs.python-version }}
+        env:
+          INPUT_PYTHON_VERSION: ${{ inputs.python-version }}
+        run: uv python install "$INPUT_PYTHON_VERSION"
 
       - name: Install Project Dependencies
         shell: bash
+        env:
+          INPUT_RUN_RUFF: ${{ inputs.run-ruff }}
+          INPUT_RUN_TESTS: ${{ inputs.run-tests }}
         run: |
           if [ -f "pyproject.toml" ]; then
             echo "==> Syncing dependencies via uv sync..."
@@ -72,10 +77,10 @@ jobs:
             echo "==> Creating hermetic venv and installing requirements.txt..."
             uv venv
             uv pip install -r requirements.txt
-            if [ "${{ inputs.run-ruff }}" = "true" ]; then
+            if [ "$INPUT_RUN_RUFF" = "true" ]; then
               uv pip install ruff
             fi
-            if [ "${{ inputs.run-tests }}" = "true" ]; then
+            if [ "$INPUT_RUN_TESTS" = "true" ]; then
               uv pip install pytest
             fi
           else
@@ -109,10 +114,13 @@ jobs:
       - name: Test Suite (pytest)
         if: ${{ inputs.run-tests }}
         shell: bash
+        env:
+          INPUT_PYTEST_ARGS: ${{ inputs.pytest-args }}
         run: |
           if [ -d "tests" ] || [ -f "test_*.py" ] || [ -f "*_test.py" ]; then
-            echo "==> Running pytest with args: ${{ inputs.pytest-args }}..."
-            uv run pytest ${{ inputs.pytest-args }}
+            echo "==> Running pytest with args: ${INPUT_PYTEST_ARGS}..."
+            read -r -a PYTEST_ARGS_ARR <<< "${INPUT_PYTEST_ARGS}"
+            uv run pytest "${PYTEST_ARGS_ARR[@]}"
           else
             echo "==> No test files found. Skipping pytest."
           fi
