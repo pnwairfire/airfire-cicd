@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: true
+      runs-on:
+        description: 'Runner label (default: "ubuntu-latest"; pass "codebuild-uw" or "codebuild-epa")'
+        required: false
+        type: string
+        default: "ubuntu-latest"
 
 permissions:
   contents: read
@@ -35,7 +40,7 @@ permissions:
 jobs:
   terraform-quality-gates:
     name: Terraform Quality Gates
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on == 'codebuild-epa' && format('codebuild-pnwairfire-epa-gh-runner-{0}-{1}', github.run_id, github.run_attempt) || ((inputs.runs-on == 'codebuild-uw' || inputs.runs-on == 'codebuild') && format('codebuild-pnwairfire-uw-gh-runner-{0}-{1}', github.run_id, github.run_attempt) || inputs.runs-on) }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}

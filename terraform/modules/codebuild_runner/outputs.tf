@@ -4,13 +4,13 @@ output "codeconnection_arn" {
 }
 
 output "codeconnection_status" {
-  description = "Current status of the AWS CodeConnections GitHub connection (must be AVAILABLE before creating the webhook)."
+  description = "Current status of the AWS CodeConnections GitHub connection."
   value       = aws_codeconnections_connection.github.connection_status
 }
 
 output "codeconnection_console_url" {
   description = "AWS Console URL to authorize the pending GitHub connection."
-  value       = "https://${var.aws_region}.console.aws.amazon.com/codesuite/settings/connections"
+  value       = "https://${data.aws_region.current.region}.console.aws.amazon.com/codesuite/settings/connections"
 }
 
 output "codebuild_project_name" {

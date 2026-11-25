@@ -18,3 +18,4 @@ Clarifies the architectural philosophy, operational team realities, and design d
 * **[USFS AirFire CI/CD Style Guide & Engineering Policy](../cicd-style-guide.md)**: The authoritative organizational standard covering team operational reality, trunk-based branching, environment tiers, deployment footprints, and keyless cloud security.
 * **[Central Reusable Hub Architecture](hub-and-spoke-architecture.md)**: Deep-dive on eliminating copy-paste workflow sprawl through centralized GitHub Actions and floating major tags (`@v1`).
 * **[Decoupled Documentation Plane](decoupled-documentation-plane.md)**: Deep-dive on the zero-deploy-key security architecture for aggregating documentation into `pnwairfire/knowledge-base`.
+* **[Architecture Decision Records (ADR) Log](adr/README.md)**: Index of architectural decisions for `airfire-cicd`, including [ADR-CICD-0001](adr/ADR-CICD-0001-org-level-aws-codebuild-github-actions-runner.md) on dual-account AWS CodeBuild runners.

@@ -1,5 +1,7 @@
+data "aws_region" "current" {}
+
 resource "aws_codeconnections_connection" "github" {
-  name          = "${var.github_org}-github"
+  name          = var.connection_name
   provider_type = "GitHub"
 }
 

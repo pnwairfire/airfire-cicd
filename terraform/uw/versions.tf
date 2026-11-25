@@ -25,7 +25,7 @@ provider "aws" {
     tags = {
       Project   = "airfire-cicd"
       ManagedBy = "terraform"
-      Component = "github-actions-runner"
+      Component = "github-actions-runner-uw"
     }
   }
 }

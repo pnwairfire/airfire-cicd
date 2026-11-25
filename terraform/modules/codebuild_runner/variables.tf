@@ -1,25 +1,17 @@
-variable "aws_region" {
-  description = "AWS region for the CodeBuild GitHub Actions runner."
-  type        = string
-  default     = "us-west-2"
-}
-
-variable "aws_profile" {
-  description = "AWS CLI profile for local runs. Set to empty string in OIDC/CI environments."
-  type        = string
-  default     = "uw"
-}
-
 variable "github_org" {
   description = "GitHub organization name authorized for the org-level CodeBuild runner webhook."
   type        = string
   default     = "pnwairfire"
 }
 
+variable "connection_name" {
+  description = "Name of the AWS CodeConnections GitHub connection."
+  type        = string
+}
+
 variable "project_name" {
   description = "AWS CodeBuild project name (referenced in GitHub Actions runs-on labels)."
   type        = string
-  default     = "pnwairfire-gh-runner"
 }
 
 variable "compute_type" {

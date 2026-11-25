@@ -30,6 +30,7 @@ Validates documentation quality gates, Diátaxis frontmatter, Wiki.js namespace 
 | `docs_path` | `string` | No | `"docs"` | Path to the directory containing documentation markdown. |
 | `validate_frontmatter` | `boolean` | No | `true` | Enforces Diátaxis YAML frontmatter tags and namespace hubs. |
 | `run_markdownlint` | `boolean` | No | `true` | Executes `markdownlint-cli2` across all documentation markdown. |
+| `runs-on` | `string` | No | `"ubuntu-latest"` | Runner label. Pass `"codebuild-uw"` or `"codebuild-epa"` to route to the org-level AWS CodeBuild runner. |
 
 ---
 
@@ -48,6 +49,7 @@ Executes Python quality gates adhering to Modern Python standards using Astral `
 | `run-tests` | `boolean` | No | `true` | Runs `uv run pytest`. |
 | `pytest-args` | `string` | No | `"-v"` | Command line arguments forwarded to `pytest`. |
 | `working-directory` | `string` | No | `"."` | Directory where Python project configuration lives. |
+| `runs-on` | `string` | No | `"ubuntu-latest"` | Runner label. Pass `"codebuild-uw"` or `"codebuild-epa"` to route to the org-level AWS CodeBuild runner. |
 
 ---
 
@@ -67,6 +69,7 @@ Executes Node.js quality gates, package caching, linting, tests, and build bundl
 | `run-test` | `boolean` | No | `true` | Runs `npm test --if-present`. |
 | `run-build` | `boolean` | No | `true` | Runs `npm run build --if-present`. |
 | `working-directory` | `string` | No | `"."` | Directory containing Node package.json. |
+| `runs-on` | `string` | No | `"ubuntu-latest"` | Runner label. Pass `"codebuild-uw"` or `"codebuild-epa"` to route to the org-level AWS CodeBuild runner. |
 
 ---
 
@@ -85,6 +88,7 @@ Executes Infrastructure-as-Code formatting, static analysis, and configuration v
 | `run-validate` | `boolean` | No | `true` | Executes `terraform init -backend=false && terraform validate`. |
 | `run-tflint` | `boolean` | No | `true` | Executes `tflint --init && tflint --recursive`. |
 | `working-directory` | `string` | No | `"."` | Directory containing Terraform HCL root. |
+| `runs-on` | `string` | No | `"ubuntu-latest"` | Runner label. Pass `"codebuild-uw"` or `"codebuild-epa"` to route to the org-level AWS CodeBuild runner. |
 
 ---
 
