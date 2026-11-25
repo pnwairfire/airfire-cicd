@@ -40,7 +40,7 @@ Prior months (July: 1,977m, August: 1,704m, September: 1,527m, October: 1,101m) 
 Deploy a shared Terraform module (`terraform/modules/codebuild_runner/`) instantiated in `terraform/uw/` (`pnwairfire-uw-gh-runner`) and `terraform/epa/` (`pnwairfire-epa-gh-runner`), authenticated via AWS CodeConnections (*AWS Connector for GitHub* App scoped strictly to selected private repositories), with opt-in `runs-on` support in `airfire-cicd@v1`.
 
 - **Pros:** `$0` idle cost; `$0.005/min` active Linux compute; ephemeral container per job (no cross-run state leakage); native `docker build` via `privileged_mode = true`; no static PATs; clean UW/EPA cost separation; per-job compute overrides (`-build-general1-medium`) without Terraform changes.
-- **Cons:** Requires a one-time AWS Console OAuth handshake per AWS account; `aws/codebuild/standard:7.0` has minor preinstalled-tool differences vs. `ubuntu-latest` (mitigated by explicit `setup-*` actions).
+- **Cons:** Requires a one-time AWS Console OAuth handshake per AWS account; `aws/codebuild/standard:8.0` has minor preinstalled-tool differences vs. `ubuntu-latest` (mitigated by explicit `setup-*` actions).
 
 ### Option 2: Static EC2 Self-Hosted Runners
 Provision always-on `t3.medium` / `t4g.medium` EC2 instances running `actions/runner`.
@@ -59,7 +59,7 @@ Authenticate per-repo CodeBuild webhooks with GitHub PATs.
 Adopted **Option 1**:
 
 1. **Dual-Account Terraform Architecture (`terraform/`):**
-   - Shared module in `terraform/modules/codebuild_runner/` provisioning `aws_codeconnections_connection`, 14-day `aws_cloudwatch_log_group`, least-privilege `aws_iam_role` (CloudWatch Logs + CodeConnections only, zero AWS deploy permissions), `aws_codebuild_project` (`aws/codebuild/standard:7.0`, `BUILD_GENERAL1_SMALL`, `privileged_mode = true`, 60m timeout), and `GITHUB_ORGANIZATION` `WORKFLOW_JOB_QUEUED` webhook.
+   - Shared module in `terraform/modules/codebuild_runner/` provisioning `aws_codeconnections_connection`, 14-day `aws_cloudwatch_log_group`, least-privilege `aws_iam_role` (CloudWatch Logs + CodeConnections only, zero AWS deploy permissions), `aws_codebuild_project` (`aws/codebuild/standard:8.0`, `host_kernel = "LINUX_KERNEL_6"` / Amazon Linux 2023, `BUILD_GENERAL1_SMALL`, `privileged_mode = true`, `concurrent_build_limit = 10`, 60m timeout), and `GITHUB_ORGANIZATION` `WORKFLOW_JOB_QUEUED` webhook.
    - `terraform/uw/` (`pnwairfire-uw-gh-runner`, UW state bucket `global-terraform-state-545607068190`) for UW-account repos (`prefect-af-managed`, `knowledge-base`, `wiki-infra`, `met-lakehouse`, `outlook-viewer-v2`).
    - `terraform/epa/` (`pnwairfire-epa-gh-runner`, EPA state bucket `airfire-cicd-tfstate-339712853872-us-west-2`) for EPA-account repos (`fasm-v4`, `tileserver-pwfsl`, `smoke-airnow-gov`, `airfire-auth`, `airfire-edge-infra`, `airfire-observability`).
 2. **Two-Layer Opt-In & Public-Repo Exclusion (Option A):**

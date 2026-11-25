@@ -92,6 +92,7 @@ resource "aws_codebuild_project" "github_runner" {
 
   environment {
     compute_type                = var.compute_type
+    host_kernel                 = var.host_kernel
     image                       = var.build_image
     type                        = "LINUX_CONTAINER"
     image_pull_credentials_type = "CODEBUILD"

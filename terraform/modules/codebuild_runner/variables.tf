@@ -23,7 +23,13 @@ variable "compute_type" {
 variable "build_image" {
   description = "CodeBuild Ubuntu container image supporting Docker, Python, Node.js, and Terraform."
   type        = string
-  default     = "aws/codebuild/standard:7.0"
+  default     = "aws/codebuild/standard:8.0"
+}
+
+variable "host_kernel" {
+  description = "CodeBuild host OS kernel (LINUX_KERNEL_6 = Amazon Linux 2023)."
+  type        = string
+  default     = "LINUX_KERNEL_6"
 }
 
 variable "build_timeout_minutes" {
