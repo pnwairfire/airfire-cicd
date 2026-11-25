@@ -37,3 +37,9 @@ variable "log_retention_days" {
   type        = number
   default     = 14
 }
+
+variable "concurrent_build_limit" {
+  description = "Maximum number of concurrent builds allowed on this CodeBuild project."
+  type        = number
+  default     = 10
+}

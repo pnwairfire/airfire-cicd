@@ -48,13 +48,28 @@ data "aws_iam_policy_document" "codebuild_runner" {
     actions = [
       "codeconnections:GetConnection",
       "codeconnections:GetConnectionToken",
-      "codeconnections:UseConnection",
       "codestar-connections:GetConnection",
+    ]
+    resources = [
+      aws_codeconnections_connection.github.arn,
+    ]
+  }
+
+  statement {
+    sid    = "CodeConnectionsUseScoped"
+    effect = "Allow"
+    actions = [
+      "codeconnections:UseConnection",
       "codestar-connections:UseConnection",
     ]
     resources = [
       aws_codeconnections_connection.github.arn,
     ]
+    condition {
+      test     = "StringLike"
+      variable = "codeconnections:FullRepositoryId"
+      values   = ["${var.github_org}/*"]
+    }
   }
 }
 
@@ -65,10 +80,11 @@ resource "aws_iam_role_policy" "codebuild_runner" {
 }
 
 resource "aws_codebuild_project" "github_runner" {
-  name          = var.project_name
-  description   = "Ephemeral AWS CodeBuild self-hosted GitHub Actions runner for ${var.github_org}"
-  service_role  = aws_iam_role.codebuild_runner.arn
-  build_timeout = var.build_timeout_minutes
+  name                   = var.project_name
+  description            = "Ephemeral AWS CodeBuild self-hosted GitHub Actions runner for ${var.github_org}"
+  service_role           = aws_iam_role.codebuild_runner.arn
+  build_timeout          = var.build_timeout_minutes
+  concurrent_build_limit = var.concurrent_build_limit
 
   artifacts {
     type = "NO_ARTIFACTS"
