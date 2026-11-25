@@ -7,3 +7,8 @@ skills-lock.json
 .superpowers/
 docs/superpowers/
 .plans/
+
+# Terraform runtime artifacts
+**/.terraform/
+*.tfstate
+*.tfstate.*
