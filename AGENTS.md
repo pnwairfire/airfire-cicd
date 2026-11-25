@@ -27,7 +27,6 @@ Before staging any git commit, agents must execute local verification commands t
   ```bash
   run-local-ci
   ```
-- **Link Portability**: Ensure all markdown links use relative file paths (`enforce-relative-paths`).
 - **No Emojis**: Prohibit emojis in documentation, policies, commit messages, and workflows (`professional-documentation`).
 
 ---
